@@ -56,7 +56,7 @@ export default function StatisticsPage() {
     });
 
     return { total, done, pending, excluded, byResult, byWork, byMaster };
-  }, [clients, masters]);
+  }, [clients, apiUsers]);
 
   const metrics = [
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
