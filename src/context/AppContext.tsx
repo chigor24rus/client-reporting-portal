@@ -125,7 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           workDate: String(c.workDate),
           mileage: Number(c.mileage) || 0,
           orderNumber: String(c.orderNumber || ''),
-          masterId: c.masterId ? String(c.masterId) : '1',
+          masterId: c.masterId ? String(c.masterId) : null,
           status: String(c.status) as 'pending' | 'done',
           result: c.result ? String(c.result) : null,
           resultNote: c.resultNote ? String(c.resultNote) : null,
