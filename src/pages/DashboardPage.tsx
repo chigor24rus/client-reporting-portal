@@ -36,11 +36,9 @@ const STATUS_COLORS: Record<string, string> = {
   '7': 'bg-muted text-muted-foreground border-border',
 };
 
-function ClientRow({ client, onSync, onLock, onUnlock }: {
+function ClientRow({ client, onSync }: {
   client: Client;
   onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
-  onLock: (id: string) => Promise<boolean>;
-  onUnlock: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [result, setResult] = useState(client.result || '');
@@ -48,14 +46,8 @@ function ClientRow({ client, onSync, onLock, onUnlock }: {
   const [callbackDate, setCallbackDate] = useState(client.callbackDate || '');
   const [saving, setSaving] = useState(false);
 
-  async function handleExpand() {
-    if (expanded) {
-      setExpanded(false);
-      await onUnlock(client.id);
-    } else {
-      const ok = await onLock(client.id);
-      if (ok) setExpanded(true);
-    }
+  function handleExpand() {
+    setExpanded(prev => !prev);
   }
 
   const workLabel = WORK_INTERVALS[client.work]?.label || client.work;
@@ -197,7 +189,7 @@ function ClientRow({ client, onSync, onLock, onUnlock }: {
 }
 
 export default function DashboardPage() {
-  const { user, clients, apiUsers, syncClientResult, lockClient, unlockClient, loadingClients } = useApp();
+  const { user, clients, apiUsers, syncClientResult, loadingClients } = useApp();
   const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
 
@@ -407,7 +399,7 @@ export default function DashboardPage() {
             </div>
           )}
           {filtered.map(client => (
-            <ClientRow key={client.id} client={client} onSync={syncClientResult} onLock={lockClient} onUnlock={unlockClient} />
+            <ClientRow key={client.id} client={client} onSync={syncClientResult} />
           ))}
           {filtered.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
