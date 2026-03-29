@@ -30,7 +30,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               className="w-9 h-9 flex-shrink-0 object-contain"
             />
             <div>
-              <p className="text-sm font-bold text-foreground leading-tight">АвтоСервис</p>
+              <p className="text-sm font-bold text-foreground leading-tight">HEVSR</p>
               <p className="text-xs text-muted-foreground">Портал</p>
             </div>
           </div>

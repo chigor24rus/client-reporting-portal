@@ -36,10 +36,12 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm mx-4 animate-fade-in">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/30 mb-4">
-            <Icon name="Wrench" size={26} className="text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">АвтоСервис</h1>
+          <img
+            src="https://cdn.poehali.dev/projects/505db067-f0f2-478b-8276-f5f75d273563/bucket/c3bac887-a637-4c12-bfbf-380b7032582d.png"
+            alt="HEVSR logo"
+            className="w-20 h-20 mx-auto mb-4 object-contain"
+          />
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">HEVSR</h1>
           <p className="text-muted-foreground text-sm mt-1">Портал мастеров-консультантов</p>
         </div>
 
