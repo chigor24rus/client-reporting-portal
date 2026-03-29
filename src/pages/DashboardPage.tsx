@@ -36,12 +36,27 @@ const STATUS_COLORS: Record<string, string> = {
   '7': 'bg-muted text-muted-foreground border-border',
 };
 
-function ClientRow({ client, onSync }: { client: Client; onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void> }) {
+function ClientRow({ client, onSync, onLock, onUnlock }: {
+  client: Client;
+  onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
+  onLock: (id: string) => Promise<boolean>;
+  onUnlock: (id: string) => Promise<void>;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [result, setResult] = useState(client.result || '');
   const [note, setNote] = useState(client.resultNote || '');
   const [callbackDate, setCallbackDate] = useState(client.callbackDate || '');
   const [saving, setSaving] = useState(false);
+
+  async function handleExpand() {
+    if (expanded) {
+      setExpanded(false);
+      await onUnlock(client.id);
+    } else {
+      const ok = await onLock(client.id);
+      if (ok) setExpanded(true);
+    }
+  }
 
   const workLabel = WORK_INTERVALS[client.work]?.label || client.work;
   const resultLabel = CALL_RESULTS.find(r => r.value === client.result)?.label;
@@ -51,6 +66,7 @@ function ClientRow({ client, onSync }: { client: Client; onSync: (id: string, re
     await onSync(client.id, result, note, callbackDate);
     setSaving(false);
     setExpanded(false);
+    // блокировка снимается на бэкенде при PATCH
   }
 
   const needsNote = ['3', '5', '6'].includes(result);
@@ -60,7 +76,7 @@ function ClientRow({ client, onSync }: { client: Client; onSync: (id: string, re
     <div className={`border border-border rounded-xl overflow-hidden transition-all duration-200 ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
       <div
         className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${client.status === 'done' ? 'bg-success/5' : 'bg-card'}`}
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleExpand}
       >
         <div className="flex-1 min-w-0 grid grid-cols-[1fr_120px_140px_120px_100px] gap-4 items-center">
           <div>
@@ -181,18 +197,17 @@ function ClientRow({ client, onSync }: { client: Client; onSync: (id: string, re
 }
 
 export default function DashboardPage() {
-  const { user, clients, apiUsers, syncClientResult, loadingClients } = useApp();
+  const { user, clients, apiUsers, syncClientResult, lockClient, unlockClient, loadingClients } = useApp();
   const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
   const myClients = useMemo(() => {
-    return clients.filter(c => {
-      if (user?.role === 'master') return c.masterId === user.masterId;
-      return true;
-    }).filter(c => !c.isExcluded);
-  }, [clients, user]);
+    // Мастер видит всех незаблокированных + тех, что заблокировал сам (бэкенд уже фильтрует)
+    // Здесь просто исключаем обработанных
+    return clients.filter(c => !c.isExcluded);
+  }, [clients]);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return myClients;
@@ -392,7 +407,7 @@ export default function DashboardPage() {
             </div>
           )}
           {filtered.map(client => (
-            <ClientRow key={client.id} client={client} onSync={syncClientResult} />
+            <ClientRow key={client.id} client={client} onSync={syncClientResult} onLock={lockClient} onUnlock={unlockClient} />
           ))}
           {filtered.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">

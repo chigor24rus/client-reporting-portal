@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import {
   apiLogin, apiLogout, apiGetMe,
   apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser,
-  apiGetClients, apiUpdateClient,
+  apiGetClients, apiLockClient, apiUnlockClient, apiUpdateClient,
   getToken,
 } from '@/lib/api';
 import { MOCK_CLIENTS } from '@/data/mockData';
@@ -36,6 +36,8 @@ type AppContextType = {
   loadingUsers: boolean;
   loadingClients: boolean;
   updateClient: (id: string, updates: Partial<Client>) => void;
+  lockClient: (id: string) => Promise<boolean>;
+  unlockClient: (id: string) => Promise<void>;
   syncClientResult: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
   refreshUsers: () => Promise<void>;
   createUser: (payload: { name: string; phone: string; password: string; role: string }) => Promise<string | null>;
@@ -112,7 +114,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshClients = useCallback(async () => {
     setLoadingClients(true);
-    const { status, data } = await apiGetClients();
+    // Для мастера передаём user_id чтобы фильтровать заблокированных другими
+    const params = user?.role === 'master' && user.id ? { user_id: user.id } : undefined;
+    const { status, data } = await apiGetClients(params);
     if (status === 200) {
       const apiClients = (data as { clients: Record<string, unknown>[] }).clients;
       if (apiClients.length > 0) {
@@ -139,7 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setClients(MOCK_CLIENTS);
     }
     setLoadingClients(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -151,6 +155,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   }, []);
+
+  const lockClient = useCallback(async (id: string): Promise<boolean> => {
+    if (!user) return false;
+    const { status, data } = await apiLockClient(id, user.id);
+    if (status === 200) return true;
+    alert((data as { error: string }).error || 'Не удалось открыть карточку');
+    return false;
+  }, [user]);
+
+  const unlockClient = useCallback(async (id: string): Promise<void> => {
+    if (!user) return;
+    await apiUnlockClient(id, user.id);
+  }, [user]);
 
   const syncClientResult = useCallback(async (
     id: string, result: string, note: string, callbackDate: string
@@ -202,7 +219,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       user, authLoading, login, logout,
       clients, apiUsers, loadingUsers, loadingClients,
-      updateClient, syncClientResult,
+      updateClient, lockClient, unlockClient, syncClientResult,
       refreshUsers, createUser, updateUserPassword, removeUser, toggleUserActive,
       refreshClients,
       currentPage, setCurrentPage,

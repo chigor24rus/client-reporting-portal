@@ -88,9 +88,17 @@ export async function apiUploadTxt(filename: string, content: string) {
 }
 
 // Clients
-export async function apiGetClients(params?: { master_id?: string; status?: string }) {
+export async function apiGetClients(params?: { user_id?: string; status?: string; include_excluded?: string }) {
   const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
   return request('clients', `/${qs}`);
+}
+
+export async function apiLockClient(id: string, user_id: string) {
+  return request('clients', `/${id}/lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
+}
+
+export async function apiUnlockClient(id: string, user_id: string) {
+  return request('clients', `/${id}/unlock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
 
 export async function apiUpdateClient(id: string, payload: {
