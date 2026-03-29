@@ -12,7 +12,7 @@ const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7']
 const EXCLUDE_RESULTS = ['3', '4'];
 
 export default function ReportsPage() {
-  const { clients, masters } = useApp();
+  const { clients, apiUsers } = useApp();
   const [tab, setTab] = useState<ReportTab>('followup');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -33,7 +33,7 @@ export default function ReportsPage() {
   );
 
   function getMasterName(masterId: string) {
-    return masters.find(m => m.id === masterId)?.name || 'Не назначен';
+    return apiUsers.find(m => m.id === masterId)?.name || 'Не назначен';
   }
 
   function getResultLabel(result: string | null) {
