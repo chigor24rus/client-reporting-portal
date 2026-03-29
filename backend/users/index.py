@@ -139,7 +139,8 @@ def handler(event: dict, context) -> dict:
 
         # DELETE /{id} — удалить пользователя
         if method == 'DELETE' and user_id:
-            cur.execute("UPDATE users SET active = FALSE WHERE id = %s", (user_id,))
+            cur.execute("DELETE FROM masters WHERE user_id = %s", (user_id,))
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             conn.commit()
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
 
