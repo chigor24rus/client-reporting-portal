@@ -6,9 +6,12 @@ type UploadStatus = 'idle' | 'dragging' | 'processing' | 'done' | 'error';
 
 interface FileResult {
   filename: string;
+  format: 'orders' | 'summary' | '';
   added: number;
   updated: number;
   total: number;
+  matched?: number;
+  unmatched?: number;
   error?: string;
 }
 
@@ -63,13 +66,17 @@ export default function UploadPage() {
       if (httpStatus === 200 && d.ok) {
         fileResults.push({
           filename: file.name,
-          added: d.added as number,
-          updated: d.updated as number,
+          format: (d.format as 'orders' | 'summary') || '',
+          added: (d.added as number) || 0,
+          updated: (d.updated as number) || 0,
           total: d.total as number,
+          matched: (d.matched as number) || 0,
+          unmatched: (d.unmatched as number) || 0,
         });
       } else {
         fileResults.push({
           filename: file.name,
+          format: '',
           added: 0,
           updated: 0,
           total: 0,
@@ -168,6 +175,17 @@ export default function UploadPage() {
                 <p className="text-sm font-medium text-foreground truncate">{r.filename}</p>
                 {r.error ? (
                   <p className="text-xs text-destructive mt-0.5">{r.error}</p>
+                ) : r.format === 'summary' ? (
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      Тип: <span className="text-foreground font-medium">Сводный отчёт (дата рожд. + сумма)</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Всего в файле: <span className="text-foreground font-medium">{r.total}</span>
+                      {' '}• Совмещено: <span className="text-success font-medium">{r.matched}</span>
+                      {' '}• Не найдено: <span className={r.unmatched ? 'text-warning font-medium' : 'text-muted-foreground'}>{r.unmatched}</span>
+                    </p>
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Всего: {r.total} • Добавлено: {r.added} • Обновлено: {r.updated}
@@ -176,36 +194,77 @@ export default function UploadPage() {
               </div>
             </div>
           ))}
-          {status === 'done' && results.every(r => !r.error) && (
-            <div className="pt-2 border-t border-border flex items-center gap-2 text-success text-sm">
-              <Icon name="CheckCircle2" size={16} />
-              <span className="font-semibold">
-                Готово! Добавлено {totalAdded}, обновлено {totalUpdated} клиентов
-              </span>
-            </div>
-          )}
+          {status === 'done' && results.every(r => !r.error) && (() => {
+            const summaryFiles = results.filter(r => r.format === 'summary');
+            const ordersFiles = results.filter(r => r.format === 'orders');
+            const totalMatched = summaryFiles.reduce((s, r) => s + (r.matched || 0), 0);
+            const totalUnmatched = summaryFiles.reduce((s, r) => s + (r.unmatched || 0), 0);
+            return (
+              <div className="pt-2 border-t border-border space-y-1">
+                {ordersFiles.length > 0 && (
+                  <div className="flex items-center gap-2 text-success text-sm">
+                    <Icon name="CheckCircle2" size={16} />
+                    <span className="font-semibold">Добавлено {totalAdded}, обновлено {totalUpdated} записей</span>
+                  </div>
+                )}
+                {summaryFiles.length > 0 && (
+                  <div className="flex items-center gap-2 text-success text-sm">
+                    <Icon name="CheckCircle2" size={16} />
+                    <span className="font-semibold">
+                      Совмещено {totalMatched} клиентов
+                      {totalUnmatched > 0 ? `, ${totalUnmatched} не найдено в базе` : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-xl p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Требования к файлу</p>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          {[
-            ['Формат файла', 'Текстовый экспорт из 1С (.txt)'],
-            ['Ф.И.О. клиента', 'Обязательное поле'],
-            ['№ телефона', 'Формат: +7 (9XX) XXX-XX-XX'],
-            ['VIN автомобиля', 'До 17 символов'],
-            ['Заказ-наряд', 'Номер и дата выполнения'],
-            ['Пробег', 'Числовое значение (км)'],
-          ].map(([field, hint]) => (
-            <div key={field} className="flex items-start gap-2">
-              <Icon name="Check" size={14} className="text-success mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-foreground font-medium text-xs">{field}</p>
-                <p className="text-muted-foreground text-xs">{hint}</p>
-              </div>
+      <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Поддерживаемые форматы</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-2">Заказ-наряды (с VIN)</p>
+            <div className="space-y-2">
+              {[
+                ['Ф.И.О. клиента', 'Обязательное поле'],
+                ['№ телефона', 'Формат: +7 (9XX) XXX-XX-XX'],
+                ['VIN автомобиля', 'До 17 символов'],
+                ['Заказ-наряд', 'Номер и дата выполнения'],
+                ['Пробег', 'Числовое значение (км)'],
+              ].map(([field, hint]) => (
+                <div key={field} className="flex items-start gap-2">
+                  <Icon name="Check" size={13} className="text-success mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-foreground font-medium text-xs">{field}</p>
+                    <p className="text-muted-foreground text-xs">{hint}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-2">Сводный отчёт (дата рожд. + сумма)</p>
+            <div className="space-y-2">
+              {[
+                ['Ф.И.О. клиента', 'Обязательное поле'],
+                ['№ телефона', 'Формат: +7 (9XX) XXX-XX-XX'],
+                ['Дата рождения', 'ДД.ММ.ГГГГ — может отсутствовать'],
+                ['Сумма', 'Итого по заказ-нарядам (руб.)'],
+                ['Совмещение', 'По телефону, затем по Ф.И.О.'],
+              ].map(([field, hint]) => (
+                <div key={field} className="flex items-start gap-2">
+                  <Icon name="Check" size={13} className="text-success mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-foreground font-medium text-xs">{field}</p>
+                    <p className="text-muted-foreground text-xs">{hint}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
