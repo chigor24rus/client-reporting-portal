@@ -231,74 +231,77 @@ def handler(event: dict, context) -> dict:
                 conn.close()
                 return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов в файле. Проверьте формат.'}, ensure_ascii=False)}
 
-            # Собираем телефоны и нормализованные имена для поиска совпадений
             phones = list({r['phone'] for r in records if r['phone']})
 
-            # Загружаем существующих клиентов по телефонам (уникальные телефоны из clients)
+            # Загружаем уникальных клиентов по телефону
             cur.execute(
                 "SELECT DISTINCT ON (phone) id, name, phone FROM clients WHERE phone = ANY(%s) ORDER BY phone, id",
                 (phones,)
             )
-            phone_map = {r[2]: (r[0], r[1]) for r in cur.fetchall()}
+            phone_map = {r[2]: r[0] for r in cur.fetchall()}
 
-            # Также ищем по нормализованному имени (если телефон не совпал или отсутствует)
-            all_names = list({normalize_name(r['name']) for r in records})
-            # Грузим клиентов, у которых имя похоже (простой поиск по lower)
-            cur.execute(
-                "SELECT DISTINCT ON (lower(trim(name))) id, name, phone FROM clients ORDER BY lower(trim(name)), id"
-            )
-            name_rows = cur.fetchall()
-            name_map = {normalize_name(r[1]): (r[0], r[2]) for r in name_rows}
+            # Загружаем уникальных клиентов по имени (только те, чьи телефоны не совпали)
+            unmatched_names = [
+                normalize_name(r['name']) for r in records
+                if not (r['phone'] and r['phone'] in phone_map)
+            ]
+            name_map = {}
+            if unmatched_names:
+                cur.execute(
+                    "SELECT DISTINCT ON (lower(trim(name))) id, name FROM clients ORDER BY lower(trim(name)), id"
+                )
+                name_map = {normalize_name(r[1]): r[0] for r in cur.fetchall()}
+
+            # Строим таблицу совмещения: phone -> (client_id, birth_date, total_spent)
+            # Одним UPDATE через VALUES + JOIN обновляем все записи батчом
+            rows_by_phone: dict = {}   # phone -> (birth_date, total_spent)
+            rows_by_id: list = []      # [(id, birth_date, total_spent)] для совпадений по имени без телефона
 
             matched = 0
             unmatched = 0
-            updated = 0
 
             for r in records:
                 phone = r['phone']
                 name_key = normalize_name(r['name'])
-                client_id = None
 
-                # Совмещение 1: по телефону
                 if phone and phone in phone_map:
-                    client_id = phone_map[phone][0]
-                # Совмещение 2: по Ф.И.О.
-                elif name_key in name_map:
-                    client_id = name_map[name_key][0]
-
-                if client_id:
-                    # Обновляем поля birth_date и total_spent
-                    update_fields = ["total_spent = %s", "updated_at = NOW()"]
-                    update_values = [r['total_spent']]
-                    if r.get('birth_date'):
-                        update_fields.insert(0, "birth_date = %s")
-                        update_values.insert(0, r['birth_date'])
-                    # Также обновляем телефон если нашли по имени
-                    if phone and name_key in name_map and phone not in phone_map:
-                        update_fields.append("phone = %s")
-                        update_values.append(phone)
-
-                    update_values.append(client_id)
-                    cur.execute(
-                        f"UPDATE clients SET {', '.join(update_fields)} WHERE id = %s",
-                        update_values
-                    )
-                    # Обновляем все записи с тем же телефоном
-                    if phone:
-                        if r.get('birth_date'):
-                            cur.execute(
-                                "UPDATE clients SET total_spent = %s, birth_date = %s, updated_at = NOW() WHERE phone = %s AND id != %s",
-                                (r['total_spent'], r['birth_date'], phone, client_id)
-                            )
-                        else:
-                            cur.execute(
-                                "UPDATE clients SET total_spent = %s, updated_at = NOW() WHERE phone = %s AND id != %s",
-                                (r['total_spent'], phone, client_id)
-                            )
+                    rows_by_phone[phone] = (r.get('birth_date'), r['total_spent'])
                     matched += 1
-                    updated += 1
+                elif name_key in name_map:
+                    rows_by_id.append((name_map[name_key], r.get('birth_date'), r['total_spent']))
+                    matched += 1
                 else:
                     unmatched += 1
+
+            # Батчевый UPDATE по телефону
+            if rows_by_phone:
+                values_sql = ', '.join(
+                    cur.mogrify("(%s, %s, %s)", (ph, bd, ts)).decode()
+                    for ph, (bd, ts) in rows_by_phone.items()
+                )
+                cur.execute(f"""
+                    UPDATE clients SET
+                        total_spent = v.total_spent::numeric,
+                        birth_date = CASE WHEN v.birth_date IS NOT NULL THEN v.birth_date::date ELSE clients.birth_date END,
+                        updated_at = NOW()
+                    FROM (VALUES {values_sql}) AS v(phone, birth_date, total_spent)
+                    WHERE clients.phone = v.phone
+                """)
+
+            # Батчевый UPDATE по id (найдены по имени)
+            if rows_by_id:
+                values_sql = ', '.join(
+                    cur.mogrify("(%s, %s, %s)", (cid, bd, ts)).decode()
+                    for cid, bd, ts in rows_by_id
+                )
+                cur.execute(f"""
+                    UPDATE clients SET
+                        total_spent = v.total_spent::numeric,
+                        birth_date = CASE WHEN v.birth_date IS NOT NULL THEN v.birth_date::date ELSE clients.birth_date END,
+                        updated_at = NOW()
+                    FROM (VALUES {values_sql}) AS v(id, birth_date, total_spent)
+                    WHERE clients.id = v.id::int
+                """)
 
             conn.commit()
             conn.close()
@@ -311,7 +314,7 @@ def handler(event: dict, context) -> dict:
                     'format': 'summary',
                     'total': len(records),
                     'matched': matched,
-                    'updated': updated,
+                    'updated': matched,
                     'unmatched': unmatched,
                     'added': 0,
                 }, ensure_ascii=False)
