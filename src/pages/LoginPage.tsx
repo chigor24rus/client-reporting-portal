@@ -100,19 +100,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-5 pt-4 border-t border-border">
-            <p className="text-xs text-muted-foreground text-center mb-3">Демо-доступ</p>
-            <div className="space-y-1.5 text-xs font-mono">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Администратор:</span>
-                <span className="text-foreground">+7 900 000-00-01 / 1234</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Мастер:</span>
-                <span className="text-foreground">+7 901 234-56-78 / 1234</span>
-              </div>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
