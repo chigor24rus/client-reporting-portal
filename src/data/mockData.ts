@@ -2,7 +2,7 @@ export const WORK_TYPES = {
   OIL: 'Масло и масляный фильтр двигателя - замена',
   BRAKE: 'Жидкость тормозная - замена с прокачкой системы',
   GEARBOX: 'Масло АКПП - замена частичная',
-  COOLANT: 'Жидкость охлаждающая ДВС и HV - замена (100% аппаратная)',
+  COOLANT: 'Жидкость охлаждающая ДВС и HV- замена (100% аппаратная)',
 } as const;
 
 export const WORK_INTERVALS: Record<string, { min: number; max: number; label: string }> = {
