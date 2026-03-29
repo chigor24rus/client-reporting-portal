@@ -7,6 +7,7 @@ import json
 import os
 import re
 import base64
+import traceback
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
@@ -23,7 +24,7 @@ def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
 
 
-def parse_txt(text: str) -> list[dict]:
+def parse_txt(text: str) -> list:
     """
     Парсит текстовый отчёт 1С.
     Каждый клиент — блок из строк:
@@ -43,37 +44,28 @@ def parse_txt(text: str) -> list[dict]:
             work_type = m.group(1).strip()
             break
 
-    # Ищем блоки клиентов — начинаются со строки "ФИО, телефон"
-    # Паттерн: строка с +7 (или 8) — это начало блока
     clients = []
     i = 0
     while i < len(lines):
         line = lines[i]
 
-        # Строка клиента: содержит телефон +7 (XXX)
-        phone_match = re.search(r'(\+7[\s\(][\d\s\(\)\-]{9,})', line)
+        # Строка клиента: содержит телефон +7 и запятую
+        phone_match = re.search(r'\+7[\s\(][\d\s\(\)\-]{9,}', line)
         if phone_match and ',' in line:
-            # Разбиваем на ФИО и телефон
             parts = line.split(',', 1)
             name = parts[0].strip()
             phone_raw = parts[1].strip()
             phone = re.sub(r'[^\d+]', '', phone_raw)
-            if phone.startswith('7') and not phone.startswith('+'):
+            if phone and not phone.startswith('+'):
                 phone = '+' + phone
 
-            # Следующая строка — VIN и модель
             vin = None
-            car_model = None
             if i + 1 < len(lines):
                 vin_line = lines[i + 1]
                 vin_m = re.search(r'VIN:\s*([^;]+)', vin_line)
                 if vin_m:
-                    vin = vin_m.group(1).strip()
-                model_m = re.search(r'VIN:[^;]+;\s*([^;]+)', vin_line)
-                if model_m:
-                    car_model = model_m.group(1).strip()
+                    vin = vin_m.group(1).strip()[:17]
 
-            # Следующая строка — заказ-наряд
             order_number = None
             work_date = None
             if i + 2 < len(lines):
@@ -86,24 +78,17 @@ def parse_txt(text: str) -> list[dict]:
                     except ValueError:
                         pass
 
-            # Строка с типом работы (i+3) — пропускаем, уже знаем из параметров
-            # Строка с пробегом (i+4)
             mileage = None
             if i + 4 < len(lines):
-                mileage_line = lines[i + 4]
-                mileage_m = re.match(r'^[\d\s]+$', mileage_line.replace(' ', ''))
-                if mileage_m or re.match(r'^[\d ]+$', mileage_line):
-                    try:
-                        mileage = int(mileage_line.replace(' ', '').replace('\xa0', ''))
-                    except ValueError:
-                        pass
+                mileage_line = lines[i + 4].replace('\xa0', '').replace(' ', '')
+                if mileage_line.isdigit():
+                    mileage = int(mileage_line)
 
             if vin and work_date and order_number:
                 clients.append({
                     'name': name,
                     'phone': phone,
-                    'vin': vin[:17],
-                    'car_model': car_model,
+                    'vin': vin,
                     'work': work_type or 'Неизвестно',
                     'work_date': work_date,
                     'mileage': mileage,
@@ -124,82 +109,101 @@ def handler(event: dict, context) -> dict:
     if method != 'POST':
         return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'})}
 
-    body = json.loads(event.get('body') or '{}')
-
-    filename = body.get('filename', 'report.txt')
-    content_b64 = body.get('content', '')
-
-    raw = base64.b64decode(content_b64)
-    # Пробуем UTF-8 (с BOM), затем Windows-1251
-    for enc in ('utf-8-sig', 'cp1251', 'utf-8'):
-        try:
-            text = raw.decode(enc)
-            break
-        except (UnicodeDecodeError, ValueError):
-            text = None
-    if not text:
-        return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось определить кодировку файла'}, ensure_ascii=False)}
-
-    clients = parse_txt(text)
-    if not clients:
-        return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов в файле. Проверьте формат.'}, ensure_ascii=False)}
-
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-    # Создаём запись отчёта
-    cur.execute(
-        "INSERT INTO reports (filename, uploaded_by, clients_count) VALUES (%s, %s, %s) RETURNING id",
-        (filename, None, len(clients))
-    )
-    report_id = cur.fetchone()['id']
-
-    # Получаем все существующие (vin, order_number) одним запросом
-    keys = [(c['vin'], c['order_number']) for c in clients]
-    cur2 = conn.cursor()
-    cur2.execute(
-        "SELECT id, vin, order_number FROM clients WHERE (vin, order_number) = ANY(%s)",
-        (keys,)
-    )
-    existing_map = {(r[1], r[2]): r[0] for r in cur2.fetchall()}
-
-    added = 0
-    updated = 0
-    to_insert = []
-
-    for c in clients:
-        key = (c['vin'], c['order_number'])
-        if key in existing_map:
-            cur2.execute(
-                """UPDATE clients SET name=%s, phone=%s, work=%s, work_date=%s,
-                   mileage=%s, report_id=%s, updated_at=NOW() WHERE id=%s""",
-                (c['name'], c['phone'], c['work'], c['work_date'], c['mileage'], report_id, existing_map[key])
-            )
-            updated += 1
+    try:
+        raw_body = event.get('body') or '{}'
+        if isinstance(raw_body, dict):
+            body = raw_body
         else:
-            to_insert.append((c['name'], c['phone'], c['vin'], c['work'], c['work_date'], c['mileage'], c['order_number'], report_id))
-            added += 1
+            body = json.loads(raw_body)
 
-    if to_insert:
-        psycopg2.extras.execute_values(
-            cur2,
-            """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
-               VALUES %s""",
-            [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], 'pending') for r in to_insert],
-            template="(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+        filename = body.get('filename', 'report.txt')
+        content_b64 = body.get('content', '')
+
+        if not content_b64:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Файл не передан'}, ensure_ascii=False)}
+
+        raw = base64.b64decode(content_b64)
+
+        text = None
+        for enc in ('utf-8-sig', 'cp1251', 'utf-8'):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if not text:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось определить кодировку файла'}, ensure_ascii=False)}
+
+        clients = parse_txt(text)
+        if not clients:
+            return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов в файле. Проверьте формат.'}, ensure_ascii=False)}
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            "INSERT INTO reports (filename, uploaded_by, clients_count) VALUES (%s, %s, %s) RETURNING id",
+            (filename, None, len(clients))
         )
+        report_id = cur.fetchone()[0]
 
-    conn.commit()
-    conn.close()
+        # Получаем существующие записи через временную таблицу
+        vins = list({c['vin'] for c in clients})
+        cur.execute(
+            "SELECT id, vin, order_number FROM clients WHERE vin = ANY(%s)",
+            (vins,)
+        )
+        existing_map = {(r[1], r[2]): r[0] for r in cur.fetchall()}
 
-    return {
-        'statusCode': 200,
-        'headers': CORS,
-        'body': json.dumps({
-            'ok': True,
-            'total': len(clients),
-            'added': added,
-            'updated': updated,
-            'report_id': report_id,
-        }, ensure_ascii=False)
-    }
+        added = 0
+        updated = 0
+        to_insert = []
+
+        for c in clients:
+            key = (c['vin'], c['order_number'])
+            if key in existing_map:
+                cur.execute(
+                    """UPDATE clients SET name=%s, phone=%s, work=%s, work_date=%s,
+                       mileage=%s, report_id=%s, updated_at=NOW() WHERE id=%s""",
+                    (c['name'], c['phone'], c['work'], c['work_date'],
+                     c['mileage'], report_id, existing_map[key])
+                )
+                updated += 1
+            else:
+                to_insert.append((
+                    c['name'], c['phone'], c['vin'], c['work'],
+                    c['work_date'], c['mileage'], c['order_number'], report_id
+                ))
+                added += 1
+
+        if to_insert:
+            psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
+                   VALUES %s""",
+                [r + ('pending',) for r in to_insert]
+            )
+
+        conn.commit()
+        conn.close()
+
+        return {
+            'statusCode': 200,
+            'headers': CORS,
+            'body': json.dumps({
+                'ok': True,
+                'total': len(clients),
+                'added': added,
+                'updated': updated,
+                'report_id': report_id,
+            }, ensure_ascii=False)
+        }
+
+    except Exception:
+        err = traceback.format_exc()
+        return {
+            'statusCode': 500,
+            'headers': CORS,
+            'body': json.dumps({'error': err}, ensure_ascii=False)
+        }
