@@ -116,14 +116,6 @@ def parse_txt(text: str) -> list[dict]:
     return clients
 
 
-def get_session_user(cur, token: str):
-    cur.execute(
-        "SELECT u.id, u.role FROM users u JOIN sessions s ON s.user_id = u.id WHERE s.token = %s AND u.active = TRUE",
-        (token,)
-    )
-    return cur.fetchone()
-
-
 def handler(event: dict, context) -> dict:
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
@@ -132,7 +124,6 @@ def handler(event: dict, context) -> dict:
     if method != 'POST':
         return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'})}
 
-    token = (event.get('headers') or {}).get('X-Session-Id', '')
     body = json.loads(event.get('body') or '{}')
 
     filename = body.get('filename', 'report.txt')
@@ -153,13 +144,10 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    user = get_session_user(cur, token) if token else None
-    uploader_id = user['id'] if user else None
-
     # Создаём запись отчёта
     cur.execute(
         "INSERT INTO reports (filename, uploaded_by, clients_count) VALUES (%s, %s, %s) RETURNING id",
-        (filename, uploader_id, len(clients))
+        (filename, None, len(clients))
     )
     report_id = cur.fetchone()['id']
 
