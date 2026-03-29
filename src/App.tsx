@@ -1,28 +1,43 @@
+import { AppProvider, useApp } from '@/context/AppContext';
+import LoginPage from '@/pages/LoginPage';
+import Layout from '@/components/Layout';
+import DashboardPage from '@/pages/DashboardPage';
+import UploadPage from '@/pages/UploadPage';
+import MastersPage from '@/pages/MastersPage';
+import StatisticsPage from '@/pages/StatisticsPage';
+import ReportsPage from '@/pages/ReportsPage';
+import IntegrationPage from '@/pages/IntegrationPage';
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+function AppContent() {
+  const { user, currentPage } = useApp();
 
-const queryClient = new QueryClient();
+  if (!user) return <LoginPage />;
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+  const renderPage = () => {
+    if (user.role === 'master') return <DashboardPage />;
+    switch (currentPage) {
+      case 'upload': return <UploadPage />;
+      case 'masters': return <MastersPage />;
+      case 'statistics': return <StatisticsPage />;
+      case 'reports': return <ReportsPage />;
+      case 'integration': return <IntegrationPage />;
+      default: return <UploadPage />;
+    }
+  };
 
-export default App;
+  return (
+    <Layout>
+      <div className="animate-fade-in">
+        {renderPage()}
+      </div>
+    </Layout>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  );
+}

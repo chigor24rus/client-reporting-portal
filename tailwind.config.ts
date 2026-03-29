@@ -7,6 +7,7 @@ export default {
 		"./components/**/*.{ts,tsx}",
 		"./app/**/*.{ts,tsx}",
 		"./src/**/*.{ts,tsx}",
+			"./1774780235640529562.html"
 	],
 	prefix: "",
 	theme: {
@@ -17,8 +18,15 @@ export default {
 				'2xl': '1400px'
 			}
 		},
+		fontFamily: {
+			golos: ['Golos Text', 'sans-serif'],
+			mono: ['IBM Plex Mono', 'monospace'],
+		},
 		extend: {
 			colors: {
+				success: 'hsl(var(--success))',
+				warning: 'hsl(var(--warning))',
+				info: 'hsl(var(--info))',
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
@@ -88,7 +96,9 @@ export default {
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'fade-in': 'fadeIn 0.3s ease forwards',
+				'scale-in': 'scaleIn 0.2s ease forwards',
 			}
 		}
 	},
