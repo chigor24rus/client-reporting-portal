@@ -28,6 +28,9 @@ export type WorkItem = {
 export type ClientCard = {
   phone: string;
   name: string;
+  birthDate?: string | null;
+  totalSpent?: number | null;
+  isBirthday?: boolean;
   works: WorkItem[];
   status: 'pending' | 'done';
 };

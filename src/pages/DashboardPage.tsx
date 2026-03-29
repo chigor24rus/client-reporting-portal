@@ -23,11 +23,132 @@ const CHART_DATA_QUARTER = [
   { name: 'Март', Иванов: 31, Сидорова: 28, Петров: 25 },
 ];
 
+// Результаты только для дня рождения (без работ)
+const BIRTHDAY_ONLY_RESULTS = CALL_RESULTS.filter(r => r.group === 'birthday' || r.value === '5' || r.value === '8');
+// Результаты только для работ (без подарков)
+const WORK_RESULTS = CALL_RESULTS.filter(r => r.group !== 'birthday');
+
+function formatBirthDate(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+}
+
+function BirthdayRow({
+  card,
+  onSync,
+}: {
+  card: ClientCard;
+  onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [result, setResult] = useState('');
+  const [note, setNote] = useState('');
+  const [callbackDate, setCallbackDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const needsCallback = result === '5';
+  const needsNote = ['3', '5', '6'].includes(result);
+
+  // Для карточки только-ДР нет реального workId — используем phone как ключ,
+  // но на бэкенд нужно отправить id записи. Берём id из первого works или null.
+  // Если works пустой — карточка без VIN, статус хранится на уровне phone.
+  // Здесь используем специальный id "birthday_{phone}"
+  const syntheticId = `birthday_${card.phone}`;
+
+  async function handleSave() {
+    setSaving(true);
+    // Нет work id — отправляем результат через phone-запись (id = 0 как сигнал)
+    await onSync(syntheticId, result, note, callbackDate);
+    setSaving(false);
+    setExpanded(false);
+  }
+
+  return (
+    <div className={`rounded-xl border transition-all duration-200 overflow-hidden ${expanded ? 'border-pink-500/40 shadow-lg shadow-pink-500/5' : 'border-pink-500/20 bg-pink-500/5'}`}>
+      <div
+        className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-pink-500/10 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="w-8 h-8 rounded-full bg-pink-500/15 flex items-center justify-center flex-shrink-0">
+          <span className="text-base">🎂</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-foreground">{card.name}</p>
+            {card.birthDate && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/20 font-medium">
+                {formatBirthDate(card.birthDate)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground font-mono">{card.phone}
+            {card.totalSpent ? <span className="ml-2 text-pink-400/70">{card.totalSpent.toLocaleString('ru-RU')} ₽ за всё время</span> : null}
+          </p>
+        </div>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Не обработан</span>
+        <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted-foreground flex-shrink-0" />
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border space-y-3 animate-fade-in">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Результат обработки
+            </label>
+            <select
+              value={result}
+              onChange={e => setResult(e.target.value)}
+              className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">— Выберите результат —</option>
+              {BIRTHDAY_ONLY_RESULTS.map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          {needsNote && (
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Комментарий..."
+              rows={2}
+              className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+            />
+          )}
+          {needsCallback && (
+            <input
+              type="date"
+              value={callbackDate}
+              onChange={e => setCallbackDate(e.target.value)}
+              className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          )}
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setExpanded(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">
+              Отмена
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !result || (needsNote && !note) || (needsCallback && !callbackDate)}
+              className="px-3 py-1.5 text-xs bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-1.5"
+            >
+              {saving && <Icon name="Loader2" size={12} className="animate-spin" />}
+              Сохранить
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkRow({
   work,
+  isBirthday,
   onSync,
 }: {
   work: WorkItem;
+  isBirthday?: boolean;
   onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -56,12 +177,8 @@ function WorkRow({
           <span className="text-xs font-medium text-foreground">{workLabel}</span>
           <span className="ml-2 text-xs text-muted-foreground font-mono">{work.vin}</span>
         </div>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">
-          Предстоящие
-        </span>
-        <span className="text-xs text-muted-foreground flex-shrink-0">
-          {new Date(work.workDate).toLocaleDateString('ru-RU')}
-        </span>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Предстоящие</span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(work.workDate).toLocaleDateString('ru-RU')}</span>
       </div>
     );
   }
@@ -73,9 +190,7 @@ function WorkRow({
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex-1 min-w-0 grid grid-cols-[140px_1fr_110px_100px] gap-3 items-center">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-foreground border border-border w-fit">
-            {workLabel}
-          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-foreground border border-border w-fit">{workLabel}</span>
           <span className="text-xs font-mono text-muted-foreground truncate">{work.vin}</span>
           <div>
             <p className="text-xs text-foreground">{new Date(work.workDate).toLocaleDateString('ru-RU')}</p>
@@ -83,13 +198,9 @@ function WorkRow({
           </div>
           <div>
             {work.result ? (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
-                {resultLabel?.slice(0, 14) || work.result}
-              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">{resultLabel?.slice(0, 14) || work.result}</span>
             ) : (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
-                Не обработан
-              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Не обработан</span>
             )}
           </div>
         </div>
@@ -103,16 +214,14 @@ function WorkRow({
             <div>Просрочено: <span className="text-foreground">{Math.max(0, Math.floor(work.ageMonths - (WORK_INTERVALS[work.work]?.min || 0)))} мес.</span></div>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Результат обработки
-            </label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Результат обработки</label>
             <select
               value={result}
               onChange={e => setResult(e.target.value)}
               className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">— Выберите результат —</option>
-              {CALL_RESULTS.map(r => (
+              {WORK_RESULTS.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
@@ -135,12 +244,7 @@ function WorkRow({
             />
           )}
           <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setExpanded(false)}
-              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
-            >
-              Отмена
-            </button>
+            <button onClick={() => setExpanded(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">Отмена</button>
             <button
               onClick={handleSave}
               disabled={saving || !result || (needsNote && !note) || (needsCallback && !callbackDate)}
@@ -169,37 +273,38 @@ function ClientCardRow({
   const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
 
   return (
-    <div className={`border border-border rounded-xl overflow-hidden transition-all duration-200 ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
       <div
-        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : 'bg-card'}`}
+        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex-1 min-w-0 grid grid-cols-[1fr_auto] gap-4 items-center">
-          <div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-foreground">{card.name}</p>
-            <p className="text-xs text-muted-foreground font-mono">{card.phone}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {activeWorks.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {activeWorks.length} {activeWorks.length === 1 ? 'работа' : 'работ'}
-              </span>
-            )}
-            {upcomingWorks.length > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
-                +{upcomingWorks.length} предстоящих
-              </span>
-            )}
-            {allDone ? (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
-                Обработан
-              </span>
-            ) : (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
-                Не обработан
+            {card.isBirthday && card.birthDate && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/20 font-medium">
+                🎂 {formatBirthDate(card.birthDate)}
               </span>
             )}
           </div>
+          <p className="text-xs text-muted-foreground font-mono">{card.phone}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {activeWorks.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {activeWorks.length} {activeWorks.length === 1 ? 'работа' : 'работ'}
+            </span>
+          )}
+          {upcomingWorks.length > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
+              +{upcomingWorks.length} предст.
+            </span>
+          )}
+          {allDone ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">Обработан</span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Не обработан</span>
+          )}
         </div>
         <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted-foreground flex-shrink-0" />
       </div>
@@ -207,7 +312,7 @@ function ClientCardRow({
       {expanded && (
         <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border animate-fade-in space-y-2">
           {card.works.map(w => (
-            <WorkRow key={w.id} work={w} onSync={onSync} />
+            <WorkRow key={w.id} work={w} isBirthday={card.isBirthday} onSync={onSync} />
           ))}
         </div>
       )}
@@ -218,14 +323,17 @@ function ClientCardRow({
 export default function DashboardPage() {
   const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
   const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
-  const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday'>('all');
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
+  const birthdayCount = useMemo(() => clientCards.filter(c => c.isBirthday).length, [clientCards]);
+
   const filtered = useMemo(() => {
-    if (filter === 'all') return clientCards;
+    if (filter === 'birthday') return clientCards.filter(c => c.isBirthday);
     if (filter === 'pending') return clientCards.filter(c => c.status !== 'done');
-    return clientCards.filter(c => c.status === 'done');
+    if (filter === 'done') return clientCards.filter(c => c.status === 'done');
+    return clientCards;
   }, [clientCards, filter]);
 
   const pending = clientCards.filter(c => c.status !== 'done').length;
@@ -273,6 +381,15 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground">Обработано</p>
             </div>
           </div>
+          {birthdayCount > 0 && (
+            <div className="metric-card !p-3 !rounded-lg flex items-center gap-2.5 border-pink-500/20">
+              <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center flex-shrink-0 text-base">🎂</div>
+              <div>
+                <p className="text-lg font-bold text-pink-400 leading-tight">{birthdayCount}</p>
+                <p className="text-xs text-muted-foreground">Именинники</p>
+              </div>
+            </div>
+          )}
           <div className="metric-card !p-3 !rounded-lg flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
               <Icon name="Users" size={16} className="text-info" />
@@ -294,11 +411,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex gap-1 bg-secondary rounded-lg p-1">
               {(['month', 'quarter'] as const).map(p => (
-                <button
-                  key={p}
-                  onClick={() => setChartPeriod(p)}
-                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${chartPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}
-                >
+                <button key={p} onClick={() => setChartPeriod(p)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${chartPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
                   {p === 'month' ? 'Месяц' : 'Квартал'}
                 </button>
               ))}
@@ -354,9 +468,7 @@ export default function DashboardPage() {
                   <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
                 </div>
               </div>
-            )) : (
-              <p className="text-sm text-muted-foreground">Нет данных</p>
-            )}
+            )) : <p className="text-sm text-muted-foreground">Нет данных</p>}
           </div>
           <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-2 text-center">
             <div>
@@ -382,11 +494,16 @@ export default function DashboardPage() {
             <span className="ml-2 text-xs font-normal text-muted-foreground">({filtered.length} записей)</span>
           </h2>
           <div className="flex gap-1 bg-secondary rounded-lg p-1">
-            {([['all', 'Все'], ['pending', 'Ожидают'], ['done', 'Обработаны']] as const).map(([val, label]) => (
+            {([
+              ['all', 'Все'],
+              ['pending', 'Ожидают'],
+              ['done', 'Обработаны'],
+              ['birthday', '🎂 Именинники'],
+            ] as const).map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setFilter(val)}
-                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${filter === val ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${filter === val ? (val === 'birthday' ? 'bg-pink-500/20 text-pink-300 shadow' : 'bg-card text-foreground shadow') : 'text-muted-foreground hover:text-foreground'}`}
               >
                 {label}
               </button>
@@ -402,7 +519,9 @@ export default function DashboardPage() {
             </div>
           )}
           {filtered.map((card, i) => (
-            <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+            card.isBirthday && card.works.length === 0
+              ? <BirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+              : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
           ))}
           {!loadingClients && filtered.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">

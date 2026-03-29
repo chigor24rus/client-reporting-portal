@@ -1,6 +1,7 @@
 """
 Управление клиентами.
-GET / — список клиентов, сгруппированных по телефону, с предстоящими работами
+GET / — список клиентов для мастера: работы в окне + именинники (±7 дней, total_spent > 10000)
+GET /?include_all=true — плоский список для админа
 PATCH /?id= — обновить результат по конкретной записи
 """
 import json
@@ -15,7 +16,7 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Session-Id',
 }
 
-# Интервалы: (min_months, max_months) — окно фильтрации
+# Интервалы: (min_months, max_months)
 WORK_INTERVALS = {
     'Масло и масляный фильтр двигателя - замена': (11, 24),
     'Жидкость тормозная - замена с прокачкой системы': (23, 36),
@@ -23,7 +24,9 @@ WORK_INTERVALS = {
     'Жидкость охлаждающая ДВС и HV- замена (100% аппаратная)': (35, 48),
 }
 
-UPCOMING_MONTHS = 3  # показываем предстоящие работы за N месяцев до порога
+UPCOMING_MONTHS = 3
+BIRTHDAY_DAYS = 7        # окно ±7 дней
+BIRTHDAY_MIN_SPENT = 10000  # минимальная сумма для именинника
 
 
 def get_conn():
@@ -31,8 +34,25 @@ def get_conn():
 
 
 def months_diff(d1: date, d2: date) -> float:
-    """Разница в месяцах между двумя датами."""
     return (d2 - d1).days / 30.44
+
+
+def is_birthday_near(birth_date: date, today: date, days: int = BIRTHDAY_DAYS) -> bool:
+    """Проверяет, попадает ли день рождения в окно ±days от сегодня (без учёта года)."""
+    if not birth_date:
+        return False
+    try:
+        bday_this_year = birth_date.replace(year=today.year)
+    except ValueError:
+        # 29 февраля в невисокосный год
+        bday_this_year = birth_date.replace(year=today.year, day=28)
+    delta = abs((bday_this_year - today).days)
+    # Также проверяем переход через конец года
+    bday_next_year = bday_this_year.replace(year=today.year + 1)
+    delta_next = abs((bday_next_year - today).days)
+    bday_prev_year = bday_this_year.replace(year=today.year - 1)
+    delta_prev = abs((bday_prev_year - today).days)
+    return min(delta, delta_next, delta_prev) <= days
 
 
 def handler(event: dict, context) -> dict:
@@ -47,7 +67,7 @@ def handler(event: dict, context) -> dict:
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
-        # GET — список клиентов
+        # ─── GET ────────────────────────────────────────────────────────────
         if method == 'GET':
             user_id = qs.get('user_id')
             include_all = qs.get('include_all', 'false') == 'true'
@@ -56,7 +76,7 @@ def handler(event: dict, context) -> dict:
                 cur.execute("""
                     SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                            c.order_number, c.master_id, c.status, c.result, c.result_note,
-                           c.callback_date, c.is_excluded
+                           c.callback_date, c.is_excluded, c.birth_date, c.total_spent
                     FROM clients c
                     WHERE c.is_excluded = FALSE
                     ORDER BY c.work_date DESC
@@ -79,18 +99,18 @@ def handler(event: dict, context) -> dict:
                         'resultNote': r['result_note'],
                         'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
                         'isExcluded': r['is_excluded'],
+                        'birthDate': r['birth_date'].strftime('%Y-%m-%d') if r['birth_date'] else None,
+                        'totalSpent': float(r['total_spent']) if r['total_spent'] else None,
                     })
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients}, ensure_ascii=False)}
 
-            # Для мастера — выбираем все записи по всем типам работ для анализа
-            # Берём последнюю запись по каждому (phone, work, vin)
+            # ─── Мастер: работы + именинники ────────────────────────────────
             today = date.today()
 
-            # Строим условие по всем работам: попадают в окно ИЛИ предстоят в ближайшие 3 мес
+            # 1. Клиенты с предстоящими/просроченными работами
             work_conditions = []
             for work, (min_m, max_m) in WORK_INTERVALS.items():
                 w = work.replace("'", "''")
-                # Минимальный возраст для предстоящих: min_m - UPCOMING_MONTHS
                 upcoming_min = max(0, min_m - UPCOMING_MONTHS)
                 work_conditions.append(f"""
                     (c.work = '{w}'
@@ -103,6 +123,7 @@ def handler(event: dict, context) -> dict:
             cur.execute(f"""
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
+                       c.birth_date, c.total_spent,
                        ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
                 FROM clients c
                 WHERE c.is_excluded = FALSE
@@ -110,33 +131,55 @@ def handler(event: dict, context) -> dict:
                   AND ({work_filter})
             """)
             all_rows = cur.fetchall()
+            work_rows = [r for r in all_rows if r['rn'] == 1]
 
-            # Оставляем только последние записи (rn=1) по каждому (phone, work, vin)
-            latest = [r for r in all_rows if r['rn'] == 1]
+            # 2. Именинники: birth_date ±7 дней, total_spent > 10000, нет незакрытых работ в выборке выше
+            #    Берём уникальных клиентов по телефону из таблицы
+            birthday_from = today - timedelta(days=BIRTHDAY_DAYS)
+            birthday_to = today + timedelta(days=BIRTHDAY_DAYS)
 
-            # Группируем по телефону
+            cur.execute("""
+                SELECT DISTINCT ON (phone) id, name, phone, birth_date, total_spent, status, result, result_note, callback_date
+                FROM clients
+                WHERE is_excluded = FALSE
+                  AND birth_date IS NOT NULL
+                  AND total_spent > %s
+                  AND (
+                      (EXTRACT(MONTH FROM birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+                       AND ABS(EXTRACT(DAY FROM birth_date) - EXTRACT(DAY FROM CURRENT_DATE)) <= %s)
+                    OR
+                      (birth_date + (DATE_TRUNC('year', CURRENT_DATE) - DATE_TRUNC('year', birth_date))
+                       BETWEEN CURRENT_DATE - INTERVAL '%s days' AND CURRENT_DATE + INTERVAL '%s days')
+                  )
+                ORDER BY phone, id
+            """, (BIRTHDAY_MIN_SPENT, BIRTHDAY_DAYS, BIRTHDAY_DAYS, BIRTHDAY_DAYS))
+            birthday_rows = cur.fetchall()
+
+            # Телефоны клиентов у которых есть работы
+            work_phones = {r['phone'] for r in work_rows if r['phone']}
+
+            # Группируем клиентов с работами по телефону
             groups: dict = {}
-            for r in latest:
-                phone = r['phone'] or r['name']  # fallback на имя для юрлиц
+            for r in work_rows:
+                phone = r['phone'] or r['name']
                 if phone not in groups:
                     groups[phone] = {
                         'phone': r['phone'],
                         'name': r['name'],
                         'works': [],
                         'min_urgency': float('inf'),
+                        'birth_date': r['birth_date'],
+                        'total_spent': float(r['total_spent']) if r['total_spent'] else None,
+                        'is_birthday': False,
                     }
 
                 work = r['work']
                 min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
                 work_date = r['work_date']
                 age_months = months_diff(work_date, today)
-
-                # Определяем: активная (в окне) или предстоящая
                 is_active = age_months >= min_m
-                is_upcoming = not is_active  # значит age_months < min_m но >= min_m - 3
-
-                # Срочность: разница между плановой датой след. замены и сегодня (в секундах)
-                next_service = work_date + timedelta(days=min_m * 30.44)
+                is_upcoming = not is_active
+                next_service = work_date + timedelta(days=int(min_m * 30.44))
                 urgency_seconds = abs((today - next_service).total_seconds())
 
                 groups[phone]['works'].append({
@@ -155,26 +198,42 @@ def handler(event: dict, context) -> dict:
                     'ageMonths': round(age_months, 1),
                     'nextServiceDate': next_service.strftime('%Y-%m-%d'),
                 })
-
-                # Срочность карточки = минимум среди активных работ
                 if is_active:
                     groups[phone]['min_urgency'] = min(groups[phone]['min_urgency'], urgency_seconds)
 
-            # Сортируем карточки по срочности (предстоящие-only карточки — в конец)
+            # Помечаем именинников среди клиентов с работами
+            for r in birthday_rows:
+                phone = r['phone']
+                if phone and is_birthday_near(r['birth_date'], today):
+                    if phone in groups:
+                        groups[phone]['is_birthday'] = True
+                    else:
+                        # Именинник без работ — добавляем отдельную карточку
+                        groups[phone] = {
+                            'phone': r['phone'],
+                            'name': r['name'],
+                            'works': [],
+                            'min_urgency': float('inf'),
+                            'birth_date': r['birth_date'],
+                            'total_spent': float(r['total_spent']) if r['total_spent'] else None,
+                            'is_birthday': True,
+                        }
+
+            # Сортируем: сначала с работами по срочности, потом только именинники
             sorted_groups = sorted(
                 groups.values(),
-                key=lambda g: g['min_urgency']
+                key=lambda g: (
+                    1 if not g['works'] else 0,  # именинники без работ — в конец
+                    g['min_urgency']
+                )
             )
 
-            # Формируем ответ
             result = []
             for g in sorted_groups:
-                # Сортируем работы внутри карточки: активные по срочности, предстоящие — в конец
                 works_sorted = sorted(
                     g['works'],
                     key=lambda w: (w['isUpcoming'], w['urgencySeconds'])
                 )
-                # Общий статус карточки: если все работы pending — pending
                 statuses = [w['status'] for w in works_sorted if not w['isUpcoming']]
                 card_status = 'pending' if not statuses or any(s == 'pending' for s in statuses) else 'done'
 
@@ -183,11 +242,14 @@ def handler(event: dict, context) -> dict:
                     'name': g['name'],
                     'works': works_sorted,
                     'status': card_status,
+                    'birthDate': g['birth_date'].strftime('%Y-%m-%d') if g['birth_date'] else None,
+                    'totalSpent': g['total_spent'],
+                    'isBirthday': g['is_birthday'],
                 })
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}
 
-        # PATCH ?id= — сохранить результат
+        # ─── PATCH ?id= ─────────────────────────────────────────────────────
         if method == 'PATCH' and client_id:
             body = json.loads(event.get('body') or '{}')
             fields = []
@@ -199,7 +261,7 @@ def handler(event: dict, context) -> dict:
                 fields.append("status = %s")
                 values.append('done' if body['result'] else 'pending')
                 fields.append("is_excluded = %s")
-                values.append(body['result'] in ('3', '4'))
+                values.append(body['result'] in ('3', '4', '8'))
 
             if 'result_note' in body:
                 fields.append("result_note = %s")

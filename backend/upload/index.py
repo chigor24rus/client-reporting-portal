@@ -2,7 +2,7 @@
 Загрузка и парсинг текстовых отчётов из 1С.
 Поддерживает два формата:
   1. «История по заказ-нарядам» — с VIN, номером заказа, пробегом
-  2. «История по заказ-нарядам (сводная)» — Ф.И.О., телефон, дата рождения, итоговая сумма
+  2. «Сводный» — Ф.И.О., телефон, дата рождения, итоговая сумма
 POST / — принимает base64-содержимое TXT-файла, определяет формат, парсит и сохраняет.
 """
 import json
@@ -21,13 +21,15 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Session-Id',
 }
 
+# Фиктивный VIN для клиентов без авто (из сводного файла)
+NO_VIN = 'NO_VIN'
+
 
 def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
 
 
 def normalize_phone(raw: str) -> str:
-    """Нормализует телефон к формату +7XXXXXXXXXX."""
     digits = re.sub(r'[^\d]', '', raw)
     if not digits:
         return ''
@@ -39,33 +41,19 @@ def normalize_phone(raw: str) -> str:
 
 
 def normalize_name(name: str) -> str:
-    """Нормализует имя: удаляет лишние пробелы, приводит к нижнему регистру для сравнения."""
     return ' '.join(name.strip().split()).lower()
 
 
 def detect_format(text: str) -> str:
-    """
-    Определяет формат файла.
-    'summary' — файл с Ф.И.О., телефоном, датой рождения, итоговой суммой.
-    'orders'  — файл с заказ-нарядами (VIN, номер, пробег).
-    """
-    # В сводном формате данные идут строками вида: ФИО, телефон, дата\tСумма
-    # Нет строк с VIN:
     if re.search(r'VIN:', text):
         return 'orders'
-    # Есть строки с телефоном +7 и числом после табуляции — сводный формат
-    if re.search(r'\+7.+\t[\d\s,\.]+$', text, re.MULTILINE):
-        return 'summary'
-    # По-умолчанию пробуем сводный, если есть строки с +7
     if re.search(r'\+7', text):
         return 'summary'
     return 'orders'
 
 
 def parse_orders_txt(text: str) -> list:
-    """
-    Парсит формат «История по заказ-нарядам» (с VIN).
-    """
+    """Парсит формат «История по заказ-нарядам» (с VIN)."""
     lines = [l.strip() for l in text.splitlines()]
 
     work_type = None
@@ -83,8 +71,7 @@ def parse_orders_txt(text: str) -> list:
         if phone_match and ',' in line:
             parts = line.split(',', 1)
             name = parts[0].strip()
-            phone_raw = parts[1].strip()
-            phone = normalize_phone(phone_raw)
+            phone = normalize_phone(parts[1].strip())
 
             vin = None
             if i + 1 < len(lines):
@@ -127,25 +114,17 @@ def parse_orders_txt(text: str) -> list:
 
 
 def parse_summary_txt(text: str) -> list:
-    """
-    Парсит формат «История по заказ-нарядам (сводная)».
-    Строки вида: Фамилия Имя Отчество, +7 (XXX) XXX-XX-XX, ДД.ММ.ГГГГ\tСумма
-    или: Фамилия Имя Отчество, +7 (XXX) XXX-XX-XX,\tСумма (без даты рождения)
-    """
+    """Парсит сводный формат: ФИО, телефон, дата рождения, итоговая сумма."""
     clients = []
     for line in text.splitlines():
         line = line.strip()
-        if not line:
+        if not line or '\t' not in line:
             continue
 
-        # Разделяем на часть до таба и сумму после таба
-        if '\t' not in line:
-            continue
         tab_idx = line.rfind('\t')
         left = line[:tab_idx].strip()
         right = line[tab_idx + 1:].strip()
 
-        # Парсим сумму (убираем пробелы и заменяем запятую на точку)
         amount_str = re.sub(r'[^\d,\.]', '', right).replace(',', '.')
         if not amount_str:
             continue
@@ -154,18 +133,15 @@ def parse_summary_txt(text: str) -> list:
         except ValueError:
             continue
 
-        # Строка должна содержать телефон +7
         if '+7' not in left:
             continue
 
-        # Разбиваем по запятым: [ФИО, телефон, дата_рождения?]
         parts = [p.strip() for p in left.split(',')]
         if len(parts) < 2:
             continue
 
         name = parts[0].strip()
-        phone_raw = parts[1].strip()
-        phone = normalize_phone(phone_raw)
+        phone = normalize_phone(parts[1].strip())
 
         birth_date = None
         if len(parts) >= 3 and parts[2]:
@@ -195,10 +171,7 @@ def handler(event: dict, context) -> dict:
 
     try:
         raw_body = event.get('body') or '{}'
-        if isinstance(raw_body, dict):
-            body = raw_body
-        else:
-            body = json.loads(raw_body)
+        body = raw_body if isinstance(raw_body, dict) else json.loads(raw_body)
 
         filename = body.get('filename', 'report.txt')
         content_b64 = body.get('content', '')
@@ -207,7 +180,6 @@ def handler(event: dict, context) -> dict:
             return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Файл не передан'}, ensure_ascii=False)}
 
         raw = base64.b64decode(content_b64)
-
         text = None
         for enc in ('utf-8-sig', 'cp1251', 'utf-8'):
             try:
@@ -220,45 +192,41 @@ def handler(event: dict, context) -> dict:
             return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось определить кодировку файла'}, ensure_ascii=False)}
 
         fmt = detect_format(text)
-
         conn = get_conn()
         cur = conn.cursor()
 
+        # ─── СВОДНЫЙ ФОРМАТ ──────────────────────────────────────────────────
         if fmt == 'summary':
-            # --- Формат: ФИО, телефон, дата рождения, итоговая сумма ---
             records = parse_summary_txt(text)
             if not records:
                 conn.close()
-                return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов в файле. Проверьте формат.'}, ensure_ascii=False)}
+                return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов. Проверьте формат.'}, ensure_ascii=False)}
 
             phones = list({r['phone'] for r in records if r['phone']})
 
-            # Загружаем уникальных клиентов по телефону
+            # Совмещение по телефону
             cur.execute(
                 "SELECT DISTINCT ON (phone) id, name, phone FROM clients WHERE phone = ANY(%s) ORDER BY phone, id",
                 (phones,)
             )
             phone_map = {r[2]: r[0] for r in cur.fetchall()}
 
-            # Загружаем уникальных клиентов по имени (только те, чьи телефоны не совпали)
-            unmatched_names = [
-                normalize_name(r['name']) for r in records
-                if not (r['phone'] and r['phone'] in phone_map)
-            ]
+            # Совмещение по имени для тех, кто не нашёлся по телефону
+            need_name_match = [r for r in records if not (r['phone'] and r['phone'] in phone_map)]
             name_map = {}
-            if unmatched_names:
+            if need_name_match:
                 cur.execute(
                     "SELECT DISTINCT ON (lower(trim(name))) id, name FROM clients ORDER BY lower(trim(name)), id"
                 )
                 name_map = {normalize_name(r[1]): r[0] for r in cur.fetchall()}
 
-            # Строим таблицу совмещения: phone -> (client_id, birth_date, total_spent)
-            # Одним UPDATE через VALUES + JOIN обновляем все записи батчом
-            rows_by_phone: dict = {}   # phone -> (birth_date, total_spent)
-            rows_by_id: list = []      # [(id, birth_date, total_spent)] для совпадений по имени без телефона
+            rows_by_phone: dict = {}  # phone -> (birth_date, total_spent)
+            rows_by_id: list = []     # [(id, birth_date, total_spent)]
+            to_insert_summary: list = []  # новые клиенты без совпадения
 
             matched = 0
             unmatched = 0
+            added = 0
 
             for r in records:
                 phone = r['phone']
@@ -271,7 +239,10 @@ def handler(event: dict, context) -> dict:
                     rows_by_id.append((name_map[name_key], r.get('birth_date'), r['total_spent']))
                     matched += 1
                 else:
+                    # Не нашли — добавляем как нового клиента (без VIN)
+                    to_insert_summary.append(r)
                     unmatched += 1
+                    added += 1
 
             # Батчевый UPDATE по телефону
             if rows_by_phone:
@@ -288,7 +259,7 @@ def handler(event: dict, context) -> dict:
                     WHERE clients.phone = v.phone
                 """)
 
-            # Батчевый UPDATE по id (найдены по имени)
+            # Батчевый UPDATE по id
             if rows_by_id:
                 values_sql = ', '.join(
                     cur.mogrify("(%s, %s, %s)", (cid, bd, ts)).decode()
@@ -303,6 +274,21 @@ def handler(event: dict, context) -> dict:
                     WHERE clients.id = v.id::int
                 """)
 
+            # INSERT новых клиентов без VIN
+            if to_insert_summary:
+                psycopg2.extras.execute_values(
+                    cur,
+                    """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number,
+                                           birth_date, total_spent, status)
+                       VALUES %s
+                       ON CONFLICT DO NOTHING""",
+                    [(
+                        r['name'], r['phone'], NO_VIN, 'birthday_only',
+                        datetime.today().date(), None, None,
+                        r.get('birth_date'), r['total_spent'], 'pending'
+                    ) for r in to_insert_summary]
+                )
+
             conn.commit()
             conn.close()
 
@@ -316,16 +302,16 @@ def handler(event: dict, context) -> dict:
                     'matched': matched,
                     'updated': matched,
                     'unmatched': unmatched,
-                    'added': 0,
+                    'added': added,
                 }, ensure_ascii=False)
             }
 
+        # ─── ФОРМАТ ЗАКАЗ-НАРЯДОВ ────────────────────────────────────────────
         else:
-            # --- Формат: заказ-наряды с VIN ---
             clients = parse_orders_txt(text)
             if not clients:
                 conn.close()
-                return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов в файле. Проверьте формат.'}, ensure_ascii=False)}
+                return {'statusCode': 422, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось распознать клиентов. Проверьте формат.'}, ensure_ascii=False)}
 
             cur.execute(
                 "INSERT INTO reports (filename, uploaded_by, clients_count) VALUES (%s, %s, %s) RETURNING id",
@@ -333,12 +319,29 @@ def handler(event: dict, context) -> dict:
             )
             report_id = cur.fetchone()[0]
 
+            # Ищем существующие записи по VIN+номер заказа
             vins = list({c['vin'] for c in clients})
             cur.execute(
                 "SELECT id, vin, order_number FROM clients WHERE vin = ANY(%s)",
                 (vins,)
             )
             existing_map = {(r[1], r[2]): r[0] for r in cur.fetchall()}
+
+            # Ищем клиентов-«заглушек» NO_VIN по телефону/имени (добавленных из сводного файла)
+            phones_in_file = list({c['phone'] for c in clients if c['phone']})
+            cur.execute(
+                "SELECT DISTINCT ON (phone) id, phone FROM clients WHERE phone = ANY(%s) AND vin = %s ORDER BY phone, id",
+                (phones_in_file, NO_VIN)
+            )
+            novin_by_phone = {r[1]: r[0] for r in cur.fetchall()}
+
+            # По именам для тех, кого не нашли по телефону
+            names_in_file = list({normalize_name(c['name']) for c in clients})
+            cur.execute(
+                "SELECT DISTINCT ON (lower(trim(name))) id, name FROM clients WHERE vin = %s ORDER BY lower(trim(name)), id",
+                (NO_VIN,)
+            )
+            novin_by_name = {normalize_name(r[1]): r[0] for r in cur.fetchall()}
 
             added = 0
             updated = 0
@@ -347,6 +350,7 @@ def handler(event: dict, context) -> dict:
             for c in clients:
                 key = (c['vin'], c['order_number'])
                 if key in existing_map:
+                    # Обычное обновление
                     cur.execute(
                         """UPDATE clients SET name=%s, phone=%s, work=%s, work_date=%s,
                            mileage=%s, report_id=%s, updated_at=NOW() WHERE id=%s""",
@@ -355,11 +359,24 @@ def handler(event: dict, context) -> dict:
                     )
                     updated += 1
                 else:
-                    to_insert.append((
-                        c['name'], c['phone'], c['vin'], c['work'],
-                        c['work_date'], c['mileage'], c['order_number'], report_id
-                    ))
-                    added += 1
+                    # Проверяем: есть ли NO_VIN-запись для этого клиента?
+                    novin_id = novin_by_phone.get(c['phone']) or novin_by_name.get(normalize_name(c['name']))
+                    if novin_id:
+                        # Превращаем заглушку в полноценную запись
+                        cur.execute(
+                            """UPDATE clients SET vin=%s, work=%s, work_date=%s, mileage=%s,
+                               order_number=%s, report_id=%s, updated_at=NOW()
+                               WHERE id=%s""",
+                            (c['vin'], c['work'], c['work_date'], c['mileage'],
+                             c['order_number'], report_id, novin_id)
+                        )
+                        updated += 1
+                    else:
+                        to_insert.append((
+                            c['name'], c['phone'], c['vin'], c['work'],
+                            c['work_date'], c['mileage'], c['order_number'], report_id
+                        ))
+                        added += 1
 
             if to_insert:
                 psycopg2.extras.execute_values(

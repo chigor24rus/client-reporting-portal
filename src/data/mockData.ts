@@ -13,16 +13,19 @@ export const WORK_INTERVALS: Record<string, { min: number; max: number; label: s
 };
 
 export const CALL_RESULTS = [
-  { value: '1', label: 'Записан на выполнение всех работ' },
-  { value: '2_oil', label: 'Записан: Масло ДВС' },
-  { value: '2_brake', label: 'Записан: Тормозная жидкость' },
-  { value: '2_gearbox', label: 'Записан: Масло АКПП' },
-  { value: '2_coolant', label: 'Записан: Антифриз' },
-  { value: '3', label: 'Клиент не обслуживается — отказался' },
-  { value: '4', label: 'Клиент продал автомобиль' },
-  { value: '5', label: 'Нет возможности (повторный созвон)' },
-  { value: '6', label: 'Выполнил работы в другом сервисе' },
-  { value: '7', label: 'Нет ответа' },
+  { value: '1', label: 'Записан на выполнение всех работ', group: 'work' },
+  { value: '2_oil', label: 'Записан: Масло ДВС', group: 'work' },
+  { value: '2_brake', label: 'Записан: Тормозная жидкость', group: 'work' },
+  { value: '2_gearbox', label: 'Записан: Масло АКПП', group: 'work' },
+  { value: '2_coolant', label: 'Записан: Антифриз', group: 'work' },
+  { value: 'gift_ok', label: 'Подарок принял, записан', group: 'birthday' },
+  { value: 'gift_no', label: 'Подарок принял, отказался', group: 'birthday' },
+  { value: '3', label: 'Клиент не обслуживается — отказался', group: 'other' },
+  { value: '4', label: 'Клиент продал автомобиль', group: 'other' },
+  { value: '5', label: 'Нет возможности (повторный созвон)', group: 'other', needsCallback: true },
+  { value: '6', label: 'Выполнил работы в другом сервисе', group: 'other' },
+  { value: '7', label: 'Нет ответа', group: 'other' },
+  { value: '8', label: 'Телефон более не принадлежит клиенту', group: 'other' },
 ];
 
 export const MASTERS = [
