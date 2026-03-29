@@ -94,11 +94,11 @@ export async function apiGetClients(params?: { user_id?: string; status?: string
 }
 
 export async function apiLockClient(id: string, user_id: string) {
-  return request('clients', `/${id}/lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
+  return request('clients', `/${id}?action=lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
 
 export async function apiUnlockClient(id: string, user_id: string) {
-  return request('clients', `/${id}/unlock`, { method: 'POST', body: JSON.stringify({ user_id }) });
+  return request('clients', `/${id}?action=unlock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
 
 export async function apiUpdateClient(id: string, payload: {
