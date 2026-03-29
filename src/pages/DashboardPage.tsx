@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
+import type { ClientCard, WorkItem } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
-import type { Client } from '@/data/mockData';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend,
 } from 'recharts';
@@ -23,164 +23,132 @@ const CHART_DATA_QUARTER = [
   { name: 'Март', Иванов: 31, Сидорова: 28, Петров: 25 },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  '1': 'bg-success/15 text-success border-success/30',
-  '2_oil': 'bg-info/15 text-info border-info/30',
-  '2_brake': 'bg-info/15 text-info border-info/30',
-  '2_gearbox': 'bg-info/15 text-info border-info/30',
-  '2_coolant': 'bg-info/15 text-info border-info/30',
-  '3': 'bg-destructive/15 text-destructive border-destructive/30',
-  '4': 'bg-destructive/15 text-destructive border-destructive/30',
-  '5': 'bg-warning/15 text-warning border-warning/30',
-  '6': 'bg-muted text-muted-foreground border-border',
-  '7': 'bg-muted text-muted-foreground border-border',
-};
-
-function ClientRow({ client, onSync }: {
-  client: Client;
+function WorkRow({
+  work,
+  onSync,
+}: {
+  work: WorkItem;
   onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [result, setResult] = useState(client.result || '');
-  const [note, setNote] = useState(client.resultNote || '');
-  const [callbackDate, setCallbackDate] = useState(client.callbackDate || '');
+  const [result, setResult] = useState(work.result || '');
+  const [note, setNote] = useState(work.resultNote || '');
+  const [callbackDate, setCallbackDate] = useState(work.callbackDate || '');
   const [saving, setSaving] = useState(false);
 
-  function handleExpand() {
-    setExpanded(prev => !prev);
-  }
-
-  const workLabel = WORK_INTERVALS[client.work]?.label || client.work;
-  const resultLabel = CALL_RESULTS.find(r => r.value === client.result)?.label;
-
-  async function handleSave() {
-    setSaving(true);
-    await onSync(client.id, result, note, callbackDate);
-    setSaving(false);
-    setExpanded(false);
-    // блокировка снимается на бэкенде при PATCH
-  }
-
+  const workLabel = WORK_INTERVALS[work.work]?.label || work.work;
+  const resultLabel = CALL_RESULTS.find(r => r.value === work.result)?.label;
   const needsNote = ['3', '5', '6'].includes(result);
   const needsCallback = result === '5';
 
+  async function handleSave() {
+    setSaving(true);
+    await onSync(work.id, result, note, callbackDate);
+    setSaving(false);
+    setExpanded(false);
+  }
+
+  if (work.isUpcoming) {
+    return (
+      <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary/40 border border-dashed border-border">
+        <Icon name="Clock" size={14} className="text-muted-foreground flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium text-foreground">{workLabel}</span>
+          <span className="ml-2 text-xs text-muted-foreground font-mono">{work.vin}</span>
+        </div>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">
+          Предстоящие
+        </span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">
+          {new Date(work.workDate).toLocaleDateString('ru-RU')}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className={`border border-border rounded-xl overflow-hidden transition-all duration-200 ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+    <div className={`rounded-lg border transition-all duration-200 ${expanded ? 'border-primary/40 shadow-sm shadow-primary/10' : 'border-border'}`}>
       <div
-        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${client.status === 'done' ? 'bg-success/5' : 'bg-card'}`}
-        onClick={handleExpand}
+        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors ${work.status === 'done' ? 'bg-success/5' : ''}`}
+        onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex-1 min-w-0 grid grid-cols-[1fr_120px_140px_120px_100px] gap-4 items-center">
+        <div className="flex-1 min-w-0 grid grid-cols-[140px_1fr_110px_100px] gap-3 items-center">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-foreground border border-border w-fit">
+            {workLabel}
+          </span>
+          <span className="text-xs font-mono text-muted-foreground truncate">{work.vin}</span>
           <div>
-            <p className="text-sm font-semibold text-foreground truncate">{client.name}</p>
-            <p className="text-xs text-muted-foreground font-mono">{client.phone}</p>
+            <p className="text-xs text-foreground">{new Date(work.workDate).toLocaleDateString('ru-RU')}</p>
+            <p className="text-xs text-muted-foreground">{work.mileage?.toLocaleString()} км</p>
           </div>
           <div>
-            <p className="text-xs font-mono text-muted-foreground truncate">{client.vin}</p>
-          </div>
-          <div>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-foreground border border-border">
-              {workLabel}
-            </span>
-          </div>
-          <div>
-            <p className="text-xs text-foreground">{new Date(client.workDate).toLocaleDateString('ru-RU')}</p>
-            <p className="text-xs text-muted-foreground">{client.mileage.toLocaleString()} км</p>
-          </div>
-          <div>
-            {client.result ? (
-              <span className={`status-badge border ${STATUS_COLORS[client.result] || 'bg-muted text-muted-foreground border-border'}`}>
-                {client.result === '7' ? 'Нет ответа' : client.result.startsWith('2') ? 'Записан' : client.result === '1' ? 'Все работы' : resultLabel?.slice(0, 12)}
+            {work.result ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
+                {resultLabel?.slice(0, 14) || work.result}
               </span>
             ) : (
-              <span className="status-badge bg-warning/10 text-warning border border-warning/30">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
                 Не обработан
               </span>
             )}
           </div>
         </div>
-        <Icon
-          name={expanded ? 'ChevronUp' : 'ChevronDown'}
-          size={16}
-          className="text-muted-foreground flex-shrink-0 transition-transform"
-        />
+        <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={14} className="text-muted-foreground flex-shrink-0" />
       </div>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-3 bg-secondary/20 border-t border-border animate-fade-in">
-          <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Заказ-наряд:</span>{' '}
-              <span className="font-mono text-foreground">{client.orderNumber}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Выполненная работа:</span>{' '}
-              <span className="text-foreground">{client.work}</span>
-            </div>
+        <div className="px-3 pb-3 pt-2 border-t border-border space-y-3 animate-fade-in">
+          <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+            <div>Заказ-наряд: <span className="text-foreground font-mono">{work.orderNumber}</span></div>
+            <div>Просрочено: <span className="text-foreground">{Math.max(0, Math.floor(work.ageMonths - (WORK_INTERVALS[work.work]?.min || 0)))} мес.</span></div>
           </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Результат обработки
-              </label>
-              <select
-                value={result}
-                onChange={e => setResult(e.target.value)}
-                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">— Выберите результат —</option>
-                {CALL_RESULTS.map(r => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {needsNote && (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  {result === '6' ? 'Причина смены сервиса / готовность вернуться' : 'Причина / комментарий'}
-                </label>
-                <textarea
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder="Введите комментарий..."
-                  rows={2}
-                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                />
-              </div>
-            )}
-
-            {needsCallback && (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Дата повторного созвона
-                </label>
-                <input
-                  type="date"
-                  value={callbackDate}
-                  onChange={e => setCallbackDate(e.target.value)}
-                  className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                onClick={() => setExpanded(false)}
-                className="px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !result || (needsNote && !note) || (needsCallback && !callbackDate)}
-                className="px-4 py-1.5 text-sm bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-2"
-              >
-                {saving && <Icon name="Loader2" size={14} className="animate-spin" />}
-                Сохранить
-              </button>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Результат обработки
+            </label>
+            <select
+              value={result}
+              onChange={e => setResult(e.target.value)}
+              className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">— Выберите результат —</option>
+              {CALL_RESULTS.map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          {needsNote && (
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder={result === '6' ? 'Причина смены сервиса...' : 'Комментарий...'}
+              rows={2}
+              className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+            />
+          )}
+          {needsCallback && (
+            <input
+              type="date"
+              value={callbackDate}
+              onChange={e => setCallbackDate(e.target.value)}
+              className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setExpanded(false)}
+              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !result || (needsNote && !note) || (needsCallback && !callbackDate)}
+              className="px-3 py-1.5 text-xs bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-1.5"
+            >
+              {saving && <Icon name="Loader2" size={12} className="animate-spin" />}
+              Сохранить
+            </button>
           </div>
         </div>
       )}
@@ -188,27 +156,81 @@ function ClientRow({ client, onSync }: {
   );
 }
 
+function ClientCardRow({
+  card,
+  onSync,
+}: {
+  card: ClientCard;
+  onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const activeWorks = card.works.filter(w => !w.isUpcoming);
+  const upcomingWorks = card.works.filter(w => w.isUpcoming);
+  const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
+
+  return (
+    <div className={`border border-border rounded-xl overflow-hidden transition-all duration-200 ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+      <div
+        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : 'bg-card'}`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex-1 min-w-0 grid grid-cols-[1fr_auto] gap-4 items-center">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{card.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">{card.phone}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {activeWorks.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {activeWorks.length} {activeWorks.length === 1 ? 'работа' : 'работ'}
+              </span>
+            )}
+            {upcomingWorks.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
+                +{upcomingWorks.length} предстоящих
+              </span>
+            )}
+            {allDone ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">
+                Обработан
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">
+                Не обработан
+              </span>
+            )}
+          </div>
+        </div>
+        <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted-foreground flex-shrink-0" />
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border animate-fade-in space-y-2">
+          {card.works.map(w => (
+            <WorkRow key={w.id} work={w} onSync={onSync} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  const { user, clients, apiUsers, syncClientResult, loadingClients } = useApp();
+  const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
   const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
-  const myClients = useMemo(() => {
-    // Мастер видит всех незаблокированных + тех, что заблокировал сам (бэкенд уже фильтрует)
-    // Здесь просто исключаем обработанных
-    return clients.filter(c => !c.isExcluded);
-  }, [clients]);
-
   const filtered = useMemo(() => {
-    if (filter === 'all') return myClients;
-    return myClients.filter(c => c.status === filter);
-  }, [myClients, filter]);
+    if (filter === 'all') return clientCards;
+    if (filter === 'pending') return clientCards.filter(c => c.status !== 'done');
+    return clientCards.filter(c => c.status === 'done');
+  }, [clientCards, filter]);
 
-  const pending = myClients.filter(c => c.status === 'pending').length;
-  const done = myClients.filter(c => c.status === 'done').length;
-  const total = myClients.length;
+  const pending = clientCards.filter(c => c.status !== 'done').length;
+  const done = clientCards.filter(c => c.status === 'done').length;
+  const total = clientCards.length;
 
   const masterStats = useMemo(() => {
     return masters.map(m => {
@@ -298,10 +320,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
                 <XAxis dataKey="name" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }}
-                  labelStyle={{ color: 'hsl(210 20% 88%)' }}
-                />
+                <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} labelStyle={{ color: 'hsl(210 20% 88%)' }} />
                 <Area type="monotone" dataKey="total" stroke="hsl(200 80% 48%)" fill="url(#gTotal)" strokeWidth={2} name="Всего" />
                 <Area type="monotone" dataKey="done" stroke="hsl(142 72% 42%)" fill="url(#gDone)" strokeWidth={2} name="Обработано" />
               </AreaChart>
@@ -323,7 +342,7 @@ export default function DashboardPage() {
         <div className="metric-card">
           <p className="text-sm font-semibold text-foreground mb-4">Эффективность мастеров</p>
           <div className="space-y-3">
-            {masterStats.map((m, i) => (
+            {masterStats.length > 0 ? masterStats.map((m, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-foreground">{m.name}</span>
@@ -332,18 +351,13 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${m.rate}%`,
-                      background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)',
-                    }}
-                  />
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-sm text-muted-foreground">Нет данных</p>
+            )}
           </div>
-
           <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-2 text-center">
             <div>
               <p className="text-lg font-bold text-foreground">{total}</p>
@@ -354,9 +368,7 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground">Обработано</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-primary">
-                {total ? Math.round((done / total) * 100) : 0}%
-              </p>
+              <p className="text-lg font-bold text-primary">{total ? Math.round((done / total) * 100) : 0}%</p>
               <p className="text-xs text-muted-foreground">Готовность</p>
             </div>
           </div>
@@ -382,15 +394,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="hidden md:grid grid-cols-[1fr_120px_140px_120px_100px_16px] gap-4 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border mb-2">
-          <span>Клиент / телефон</span>
-          <span>VIN</span>
-          <span>Работа</span>
-          <span>Дата / пробег</span>
-          <span>Статус</span>
-          <span />
-        </div>
-
         <div className="space-y-2">
           {loadingClients && filtered.length === 0 && (
             <div className="flex items-center gap-3 text-muted-foreground py-8 justify-center">
@@ -398,10 +401,10 @@ export default function DashboardPage() {
               <span className="text-sm">Загрузка клиентов...</span>
             </div>
           )}
-          {filtered.map(client => (
-            <ClientRow key={client.id} client={client} onSync={syncClientResult} />
+          {filtered.map((card, i) => (
+            <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
           ))}
-          {filtered.length === 0 && (
+          {!loadingClients && filtered.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Icon name="Inbox" size={32} className="mx-auto mb-2 opacity-40" />
               <p className="text-sm">Нет записей</p>

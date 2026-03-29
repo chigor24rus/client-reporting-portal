@@ -8,6 +8,30 @@ import {
 import { MOCK_CLIENTS } from '@/data/mockData';
 import type { Client } from '@/data/mockData';
 
+export type WorkItem = {
+  id: string;
+  vin: string;
+  work: string;
+  workDate: string;
+  mileage: number;
+  orderNumber: string;
+  status: 'pending' | 'done';
+  result: string | null;
+  resultNote: string | null;
+  callbackDate: string | null;
+  isUpcoming: boolean;
+  urgencySeconds: number;
+  ageMonths: number;
+  nextServiceDate: string;
+};
+
+export type ClientCard = {
+  phone: string;
+  name: string;
+  works: WorkItem[];
+  status: 'pending' | 'done';
+};
+
 export type User = {
   id: string;
   name: string;
@@ -32,6 +56,7 @@ type AppContextType = {
   login: (phone: string, password: string) => Promise<string | null>;
   logout: () => void;
   clients: Client[];
+  clientCards: ClientCard[];
   apiUsers: ApiUser[];
   loadingUsers: boolean;
   loadingClients: boolean;
@@ -65,6 +90,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientCards, setClientCards] = useState<ClientCard[]>([]);
   const [apiUsers, setApiUsers] = useState<ApiUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingClients, setLoadingClients] = useState(false);
@@ -114,33 +140,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshClients = useCallback(async () => {
     setLoadingClients(true);
-    // Для мастера передаём user_id чтобы фильтровать заблокированных другими
-    const params = user?.role === 'master' && user.id ? { user_id: user.id } : undefined;
+    const params = user?.role === 'admin'
+      ? { include_all: 'true' }
+      : user?.id ? { user_id: user.id } : undefined;
     const { status, data } = await apiGetClients(params);
     if (status === 200) {
-      const apiClients = (data as { clients: Record<string, unknown>[] }).clients;
-      if (apiClients.length > 0) {
-        setClients(apiClients.map(c => ({
-          id: String(c.id),
-          name: String(c.name),
-          phone: String(c.phone || ''),
-          vin: String(c.vin),
-          work: String(c.work),
-          workDate: String(c.workDate),
-          mileage: Number(c.mileage) || 0,
-          orderNumber: String(c.orderNumber || ''),
-          masterId: c.masterId ? String(c.masterId) : null,
-          status: String(c.status) as 'pending' | 'done',
-          result: c.result ? String(c.result) : null,
-          resultNote: c.resultNote ? String(c.resultNote) : null,
-          callbackDate: c.callbackDate ? String(c.callbackDate) : null,
-          isExcluded: Boolean(c.isExcluded),
-        })));
+      const raw = (data as { clients: Record<string, unknown>[] }).clients;
+      if (raw.length > 0) {
+        if (user?.role === 'master') {
+          // Новый формат: карточки с массивом works
+          setClientCards(raw as unknown as ClientCard[]);
+          setClients([]);
+        } else {
+          // Для админа — плоский список
+          setClients(raw.map((c: Record<string, unknown>) => ({
+            id: String(c.id),
+            name: String(c.name),
+            phone: String(c.phone || ''),
+            vin: String(c.vin),
+            work: String(c.work),
+            workDate: String(c.workDate),
+            mileage: Number(c.mileage) || 0,
+            orderNumber: String(c.orderNumber || ''),
+            masterId: c.masterId ? String(c.masterId) : null,
+            status: String(c.status) as 'pending' | 'done',
+            result: c.result ? String(c.result) : null,
+            resultNote: c.resultNote ? String(c.resultNote) : null,
+            callbackDate: c.callbackDate ? String(c.callbackDate) : null,
+            isExcluded: Boolean(c.isExcluded),
+          })));
+          setClientCards([]);
+        }
       } else {
-        setClients(MOCK_CLIENTS);
+        setClients(user?.role === 'admin' ? MOCK_CLIENTS : []);
+        setClientCards([]);
       }
-    } else {
-      setClients(MOCK_CLIENTS);
     }
     setLoadingClients(false);
   }, [user]);
@@ -218,7 +252,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       user, authLoading, login, logout,
-      clients, apiUsers, loadingUsers, loadingClients,
+      clients, clientCards, apiUsers, loadingUsers, loadingClients,
       updateClient, lockClient, unlockClient, syncClientResult,
       refreshUsers, createUser, updateUserPassword, removeUser, toggleUserActive,
       refreshClients,
