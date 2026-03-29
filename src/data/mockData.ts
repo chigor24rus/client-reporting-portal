@@ -166,5 +166,8 @@ export const MOCK_CLIENTS = [
   },
 ];
 
-export type Client = typeof MOCK_CLIENTS[0];
+export type Client = typeof MOCK_CLIENTS[0] & {
+  birthDate?: string | null;
+  totalSpent?: number | null;
+};
 export type Master = typeof MASTERS[0];

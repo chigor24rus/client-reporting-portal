@@ -173,6 +173,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             resultNote: c.resultNote ? String(c.resultNote) : null,
             callbackDate: c.callbackDate ? String(c.callbackDate) : null,
             isExcluded: Boolean(c.isExcluded),
+            birthDate: c.birthDate ? String(c.birthDate) : null,
+            totalSpent: c.totalSpent ? Number(c.totalSpent) : null,
           })));
           setClientCards([]);
         }

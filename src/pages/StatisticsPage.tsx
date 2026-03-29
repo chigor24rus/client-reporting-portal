@@ -55,7 +55,18 @@ export default function StatisticsPage() {
       };
     });
 
-    return { total, done, pending, excluded, byResult, byWork, byMaster };
+    const today = new Date();
+    const birthdays = clients.filter(c => {
+      if (!c.birthDate) return false;
+      const d = new Date(c.birthDate);
+      const diff = Math.abs(
+        new Date(today.getFullYear(), d.getMonth(), d.getDate()).getTime() - 
+        new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+      ) / 86400000;
+      return diff <= 7;
+    }).length;
+
+    return { total, done, pending, excluded, byResult, byWork, byMaster, birthdays };
   }, [clients, apiUsers]);
 
   const metrics = [
@@ -63,6 +74,7 @@ export default function StatisticsPage() {
     { label: 'Обработано', value: summary.done, icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
     { label: 'Ожидают', value: summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
     { label: 'В архиве', value: summary.excluded, icon: 'Archive', color: 'text-muted-foreground', bg: 'bg-secondary' },
+    { label: 'Именинники', value: summary.birthdays, icon: 'Cake', color: 'text-pink-400', bg: 'bg-pink-500/10' },
   ];
 
   return (
@@ -72,7 +84,7 @@ export default function StatisticsPage() {
         <p className="text-sm text-muted-foreground">Сводные данные за текущий период</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         {metrics.map(m => (
           <div key={m.label} className="metric-card">
             <div className="flex items-start justify-between">
