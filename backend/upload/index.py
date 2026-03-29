@@ -129,13 +129,16 @@ def handler(event: dict, context) -> dict:
     filename = body.get('filename', 'report.txt')
     content_b64 = body.get('content', '')
 
-    try:
-        text = base64.b64decode(content_b64).decode('utf-8-sig')
-    except Exception:
+    raw = base64.b64decode(content_b64)
+    # Пробуем UTF-8 (с BOM), затем Windows-1251
+    for enc in ('utf-8-sig', 'cp1251', 'utf-8'):
         try:
-            text = base64.b64decode(content_b64).decode('cp1251')
-        except Exception as e:
-            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': f'Ошибка декодирования файла: {str(e)}'}, ensure_ascii=False)}
+            text = raw.decode(enc)
+            break
+        except (UnicodeDecodeError, ValueError):
+            text = None
+    if not text:
+        return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Не удалось определить кодировку файла'}, ensure_ascii=False)}
 
     clients = parse_txt(text)
     if not clients:
@@ -151,33 +154,40 @@ def handler(event: dict, context) -> dict:
     )
     report_id = cur.fetchone()['id']
 
+    # Получаем все существующие (vin, order_number) одним запросом
+    keys = [(c['vin'], c['order_number']) for c in clients]
+    cur2 = conn.cursor()
+    cur2.execute(
+        "SELECT id, vin, order_number FROM clients WHERE (vin, order_number) = ANY(%s)",
+        (keys,)
+    )
+    existing_map = {(r[1], r[2]): r[0] for r in cur2.fetchall()}
+
     added = 0
     updated = 0
+    to_insert = []
 
     for c in clients:
-        # Проверяем существующую запись по VIN + order_number
-        cur.execute(
-            "SELECT id FROM clients WHERE vin = %s AND order_number = %s",
-            (c['vin'], c['order_number'])
-        )
-        existing = cur.fetchone()
-
-        if existing:
-            cur.execute(
-                """UPDATE clients SET
-                    name = %s, phone = %s, work = %s, work_date = %s, mileage = %s,
-                    report_id = %s, updated_at = NOW()
-                WHERE id = %s""",
-                (c['name'], c['phone'], c['work'], c['work_date'], c['mileage'], report_id, existing['id'])
+        key = (c['vin'], c['order_number'])
+        if key in existing_map:
+            cur2.execute(
+                """UPDATE clients SET name=%s, phone=%s, work=%s, work_date=%s,
+                   mileage=%s, report_id=%s, updated_at=NOW() WHERE id=%s""",
+                (c['name'], c['phone'], c['work'], c['work_date'], c['mileage'], report_id, existing_map[key])
             )
             updated += 1
         else:
-            cur.execute(
-                """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')""",
-                (c['name'], c['phone'], c['vin'], c['work'], c['work_date'], c['mileage'], c['order_number'], report_id)
-            )
+            to_insert.append((c['name'], c['phone'], c['vin'], c['work'], c['work_date'], c['mileage'], c['order_number'], report_id))
             added += 1
+
+    if to_insert:
+        psycopg2.extras.execute_values(
+            cur2,
+            """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
+               VALUES %s""",
+            [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], 'pending') for r in to_insert],
+            template="(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+        )
 
     conn.commit()
     conn.close()

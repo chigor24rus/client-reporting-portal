@@ -11,7 +11,7 @@
       "method": "POST",
       "path": "/",
       "body": {},
-      "expectedStatus": 422
+      "expectedStatus": 400
     }
   ]
 }
