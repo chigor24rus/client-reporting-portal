@@ -21,10 +21,10 @@ const RESULT_COLORS: Record<string, string> = {
 };
 
 export default function StatisticsPage() {
-  const { clients, masters } = useApp();
+  const { clients = [], masters = [] } = useApp();
 
   const summary = useMemo(() => {
-    const all = clients.filter(c => !c.isExcluded);
+    const all = (clients ?? []).filter(c => !c.isExcluded);
     const total = all.length;
     const done = all.filter(c => c.status === 'done').length;
     const pending = all.filter(c => c.status === 'pending').length;
