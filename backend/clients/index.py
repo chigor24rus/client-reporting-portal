@@ -156,6 +156,22 @@ def handler(event: dict, context) -> dict:
             """, (BIRTHDAY_MIN_SPENT, BIRTHDAY_DAYS, BIRTHDAY_DAYS, BIRTHDAY_DAYS))
             birthday_rows = cur.fetchall()
 
+            # 3. Отложенные: result='5', callback_date > today — скрыты из основного списка,
+            #    но должны отображаться в «Ожидают» с датой созвона
+            cur.execute(f"""
+                SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
+                       c.order_number, c.status, c.result, c.result_note, c.callback_date,
+                       c.birth_date, c.total_spent,
+                       ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
+                FROM clients c
+                WHERE c.is_excluded = FALSE
+                  AND c.status != 'done'
+                  AND c.result = '5'
+                  AND c.callback_date > CURRENT_DATE
+                  AND ({work_filter})
+            """)
+            deferred_rows = [r for r in cur.fetchall() if r['rn'] == 1]
+
             # Телефоны клиентов у которых есть работы
             work_phones = {r['phone'] for r in work_rows if r['phone']}
 
@@ -220,6 +236,55 @@ def handler(event: dict, context) -> dict:
                             'is_birthday': True,
                         }
 
+            # Добавляем отложенных клиентов — отдельные карточки с isDeferred=True
+            deferred_phones = {r['phone'] for r in deferred_rows if r['phone']}
+            for r in deferred_rows:
+                phone = r['phone'] or r['name']
+                if phone in groups:
+                    # Уже есть в основном списке (другая работа не отложена) — не дублируем
+                    continue
+                if phone not in groups:
+                    work = r['work']
+                    min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
+                    work_date = r['work_date']
+                    age_months = months_diff(work_date, today)
+                    is_active = age_months >= min_m
+                    next_service = work_date + timedelta(days=int(min_m * 30.44))
+                    urgency_seconds = abs((today - next_service).total_seconds())
+                    if phone not in groups:
+                        groups[phone] = {
+                            'phone': r['phone'],
+                            'name': r['name'],
+                            'works': [],
+                            'min_urgency': float('inf'),
+                            'birth_date': r['birth_date'],
+                            'total_spent': float(r['total_spent']) if r['total_spent'] else None,
+                            'is_birthday': False,
+                            'is_deferred': True,
+                            'callback_date': r['callback_date'],
+                        }
+                    groups[phone]['works'].append({
+                        'id': str(r['id']),
+                        'vin': r['vin'],
+                        'work': work,
+                        'workDate': work_date.strftime('%Y-%m-%d'),
+                        'mileage': r['mileage'],
+                        'orderNumber': r['order_number'],
+                        'status': r['status'],
+                        'result': r['result'],
+                        'resultNote': r['result_note'],
+                        'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
+                        'isUpcoming': not is_active,
+                        'urgencySeconds': urgency_seconds,
+                        'ageMonths': round(age_months, 1),
+                        'nextServiceDate': next_service.strftime('%Y-%m-%d'),
+                    })
+
+            # Проставляем is_deferred = False тем, у кого нет флага
+            for g in groups.values():
+                g.setdefault('is_deferred', False)
+                g.setdefault('callback_date', None)
+
             # Сортируем: сначала с работами по срочности, потом только именинники
             sorted_groups = sorted(
                 groups.values(),
@@ -246,6 +311,8 @@ def handler(event: dict, context) -> dict:
                     'birthDate': g['birth_date'].strftime('%Y-%m-%d') if g['birth_date'] else None,
                     'totalSpent': g['total_spent'],
                     'isBirthday': g['is_birthday'],
+                    'isDeferred': g['is_deferred'],
+                    'cardCallbackDate': g['callback_date'].strftime('%Y-%m-%d') if g['callback_date'] else None,
                 })
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}

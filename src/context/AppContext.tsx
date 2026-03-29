@@ -31,6 +31,8 @@ export type ClientCard = {
   birthDate?: string | null;
   totalSpent?: number | null;
   isBirthday?: boolean;
+  isDeferred?: boolean;
+  cardCallbackDate?: string | null;
   works: WorkItem[];
   status: 'pending' | 'done';
 };

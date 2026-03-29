@@ -138,10 +138,14 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
   const upcomingWorks = card.works.filter(w => w.isUpcoming);
   const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
 
+  const deferredLabel = card.cardCallbackDate
+    ? new Date(card.cardCallbackDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+    : null;
+
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${card.isDeferred ? 'border-blue-500/30' : card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
       <div
-        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
+        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : card.isDeferred ? 'bg-blue-500/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex-1 min-w-0">
@@ -150,6 +154,11 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
             {card.isBirthday && card.birthDate && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/20 font-medium">
                 🎂 {formatBirthDate(card.birthDate)}
+              </span>
+            )}
+            {card.isDeferred && deferredLabel && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20 font-medium">
+                📅 Созвон {deferredLabel}
               </span>
             )}
           </div>

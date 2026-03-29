@@ -18,7 +18,8 @@ export default function DashboardPage() {
     if (filter === 'birthday') return clientCards.filter(c => c.isBirthday);
     if (filter === 'pending') return clientCards.filter(c => c.status !== 'done');
     if (filter === 'done') return clientCards.filter(c => c.status === 'done');
-    return clientCards;
+    // «Все» — не показываем отложенных, они только в «Ожидают»
+    return clientCards.filter(c => !c.isDeferred);
   }, [clientCards, filter]);
 
   const pending = clientCards.filter(c => c.status !== 'done').length;
