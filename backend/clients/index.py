@@ -257,8 +257,8 @@ def handler(event: dict, context) -> dict:
 
             if 'result' in body:
                 r_val = body['result']
-                # '7' — нет ответа: остаётся pending, клиент остаётся в списке для повторного звонка
-                PENDING_RESULTS = {'7'}
+                # '7' — нет ответа, '5' — повторный созвон: остаются pending
+                PENDING_RESULTS = {'7', '5'}
                 fields.append("result = %s")
                 values.append(r_val)
                 fields.append("status = %s")
