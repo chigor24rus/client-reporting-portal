@@ -38,15 +38,14 @@ def handler(event: dict, context) -> dict:
     parts = [p for p in path.strip('/').split('/') if p]
     qs = event.get('queryStringParameters') or {}
 
-    # client_id — первый числовой сегмент пути
-    client_id = None
-    for p in parts:
-        if p.isdigit():
-            client_id = p
-            break
-
-    # action — из query ?action=lock|unlock
+    # action и client_id — из query параметров (платформа блокирует пути с числами)
     action = qs.get('action')
+    client_id = qs.get('id')
+    if not client_id:
+        for p in parts:
+            if p.isdigit():
+                client_id = p
+                break
 
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

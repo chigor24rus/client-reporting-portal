@@ -94,11 +94,11 @@ export async function apiGetClients(params?: { user_id?: string; status?: string
 }
 
 export async function apiLockClient(id: string, user_id: string) {
-  return request('clients', `/${id}?action=lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
+  return request('clients', `/?id=${id}&action=lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
 
 export async function apiUnlockClient(id: string, user_id: string) {
-  return request('clients', `/${id}?action=unlock`, { method: 'POST', body: JSON.stringify({ user_id }) });
+  return request('clients', `/?id=${id}&action=unlock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
 
 export async function apiUpdateClient(id: string, payload: {
@@ -106,7 +106,7 @@ export async function apiUpdateClient(id: string, payload: {
   result_note?: string;
   callback_date?: string;
 }) {
-  return request('clients', `/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  return request('clients', `/?id=${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
 export { getToken };
