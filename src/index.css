@@ -54,10 +54,6 @@
     @apply border-border;
   }
 
-  html {
-    @apply dark;
-  }
-
   body {
     @apply bg-background text-foreground font-golos;
     font-feature-settings: "kern" 1;
