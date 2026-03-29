@@ -139,6 +139,9 @@ def handler(event: dict, context) -> dict:
 
         # DELETE /{id} — удалить пользователя
         if method == 'DELETE' and user_id:
+            cur.execute("UPDATE audit_log SET user_id = NULL WHERE user_id = %s", (user_id,))
+            cur.execute("UPDATE reports SET uploaded_by = NULL WHERE uploaded_by = %s", (user_id,))
+            cur.execute("UPDATE clients SET locked_by = NULL WHERE locked_by = %s", (user_id,))
             cur.execute("DELETE FROM masters WHERE user_id = %s", (user_id,))
             cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             conn.commit()
