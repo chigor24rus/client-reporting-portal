@@ -21,13 +21,13 @@ const RESULT_COLORS: Record<string, string> = {
 };
 
 export default function StatisticsPage() {
-  const { clients = [], masters = [] } = useApp();
+  const { clients = [], apiUsers = [] } = useApp();
 
   const summary = useMemo(() => {
     const all = (clients ?? []).filter(c => !c.isExcluded);
     const total = all.length;
-    const done = all.filter(c => c.status === 'done').length;
-    const pending = all.filter(c => c.status === 'pending').length;
+    const done = all.filter(c => c.result !== null).length;
+    const pending = all.filter(c => c.result === null).length;
     const excluded = clients.filter(c => c.isExcluded).length;
 
     const byResult = CALL_RESULTS.map(r => ({
@@ -42,14 +42,15 @@ export default function StatisticsPage() {
       done: all.filter(c => c.work === work && c.status === 'done').length,
     }));
 
+    const masters = apiUsers.filter(u => u.role === 'master' && u.active);
     const byMaster = masters.map(m => {
-      const mc = all.filter(c => c.masterId === m.id);
-      const md = mc.filter(c => c.status === 'done').length;
+      const mc = all.filter(c => c.masterId === (m.masterId || m.id));
+      const md = mc.filter(c => c.result !== null).length;
       return {
         name: m.name.split(' ').slice(0, 2).join(' '),
         total: mc.length,
         done: md,
-        pending: mc.length - md,
+        pending: mc.filter(c => c.result === null).length,
         rate: mc.length ? Math.round((md / mc.length) * 100) : 0,
       };
     });
