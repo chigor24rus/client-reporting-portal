@@ -72,11 +72,11 @@ export async function apiCreateUser(payload: {
 }
 
 export async function apiUpdateUser(id: string, payload: { password?: string; active?: boolean }) {
-  return request('users', `/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  return request('users', `/?id=${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
 export async function apiDeleteUser(id: string) {
-  return request('users', `/${id}`, { method: 'DELETE' });
+  return request('users', `/?id=${id}`, { method: 'DELETE' });
 }
 
 // Upload

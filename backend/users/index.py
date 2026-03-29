@@ -32,9 +32,13 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
     method = event.get('httpMethod', 'GET')
-    path = event.get('path', '/')
-    parts = [p for p in path.strip('/').split('/') if p]
-    user_id = parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
+    qs = event.get('queryStringParameters') or {}
+    # id может прийти как ?id=X или как часть пути /X
+    user_id = qs.get('id')
+    if not user_id:
+        path = event.get('path', '/')
+        parts = [p for p in path.strip('/').split('/') if p]
+        user_id = parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
 
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
