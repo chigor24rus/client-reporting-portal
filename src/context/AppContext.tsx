@@ -110,7 +110,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (status === 200) {
         const u = (data as { user: ApiUser }).user;
         setUser(mapApiUser(u));
-        setCurrentPage(u.role === 'admin' ? 'upload' : 'dashboard');
+        setCurrentPage(u.role === 'admin' ? 'statistics' : 'dashboard');
       }
     }).finally(() => setAuthLoading(false));
   }, []);
@@ -120,7 +120,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (status === 200) {
       const u = (data as { user: ApiUser }).user;
       setUser(mapApiUser(u));
-      setCurrentPage(u.role === 'admin' ? 'upload' : 'dashboard');
+      setCurrentPage(u.role === 'admin' ? 'statistics' : 'dashboard');
       return null;
     }
     return (data as { error: string }).error || 'Ошибка входа';
