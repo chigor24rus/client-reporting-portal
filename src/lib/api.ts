@@ -79,6 +79,14 @@ export async function apiDeleteUser(id: string) {
   return request('users', `/${id}`, { method: 'DELETE' });
 }
 
+// Upload
+export async function apiUploadTxt(filename: string, content: string) {
+  return request('upload', '/', {
+    method: 'POST',
+    body: JSON.stringify({ filename, content }),
+  });
+}
+
 // Clients
 export async function apiGetClients(params?: { master_id?: string; status?: string }) {
   const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
