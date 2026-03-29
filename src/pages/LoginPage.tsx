@@ -20,15 +20,13 @@ export default function LoginPage() {
     return result;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    setTimeout(() => {
-      const ok = login(phone, password);
-      if (!ok) setError('Неверный номер телефона или пароль');
-      setLoading(false);
-    }, 600);
+    const err = await login(phone, password);
+    if (err) setError(err);
+    setLoading(false);
   }
 
   return (

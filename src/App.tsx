@@ -10,7 +10,18 @@ import IntegrationPage from '@/pages/IntegrationPage';
 import AdminsPage from '@/pages/AdminsPage';
 
 function AppContent() {
-  const { user, currentPage } = useApp();
+  const { user, authLoading, currentPage } = useApp();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm">Загрузка...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return <LoginPage />;
 

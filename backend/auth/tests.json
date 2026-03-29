@@ -1,0 +1,24 @@
+{
+  "tests": [
+    {
+      "name": "Login with wrong credentials returns 401",
+      "method": "POST",
+      "path": "/",
+      "body": {"phone": "+79999999999", "password": "wrong"},
+      "expectedStatus": 401
+    },
+    {
+      "name": "Login without body returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {},
+      "expectedStatus": 400
+    },
+    {
+      "name": "Get me without token returns 401",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 401
+    }
+  ]
+}

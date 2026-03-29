@@ -1,0 +1,17 @@
+{
+  "tests": [
+    {
+      "name": "Get all clients returns 200",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Patch without id returns 405",
+      "method": "PATCH",
+      "path": "/",
+      "body": {},
+      "expectedStatus": 405
+    }
+  ]
+}

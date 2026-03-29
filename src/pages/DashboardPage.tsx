@@ -36,22 +36,20 @@ const STATUS_COLORS: Record<string, string> = {
   '7': 'bg-muted text-muted-foreground border-border',
 };
 
-function ClientRow({ client, onUpdate }: { client: Client; onUpdate: (id: string, updates: Partial<Client>) => void }) {
+function ClientRow({ client, onSync }: { client: Client; onSync: (id: string, result: string, note: string, callbackDate: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   const [result, setResult] = useState(client.result || '');
   const [note, setNote] = useState(client.resultNote || '');
   const [callbackDate, setCallbackDate] = useState(client.callbackDate || '');
+  const [saving, setSaving] = useState(false);
 
   const workLabel = WORK_INTERVALS[client.work]?.label || client.work;
   const resultLabel = CALL_RESULTS.find(r => r.value === client.result)?.label;
 
-  function handleSave() {
-    onUpdate(client.id, {
-      result,
-      resultNote: note,
-      callbackDate,
-      status: result ? 'done' : 'pending',
-    });
+  async function handleSave() {
+    setSaving(true);
+    await onSync(client.id, result, note, callbackDate);
+    setSaving(false);
     setExpanded(false);
   }
 
@@ -168,9 +166,10 @@ function ClientRow({ client, onUpdate }: { client: Client; onUpdate: (id: string
               </button>
               <button
                 onClick={handleSave}
-                disabled={!result || (needsNote && !note) || (needsCallback && !callbackDate)}
-                className="px-4 py-1.5 text-sm bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
+                disabled={saving || !result || (needsNote && !note) || (needsCallback && !callbackDate)}
+                className="px-4 py-1.5 text-sm bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-2"
               >
+                {saving && <Icon name="Loader2" size={14} className="animate-spin" />}
                 Сохранить
               </button>
             </div>
@@ -182,9 +181,11 @@ function ClientRow({ client, onUpdate }: { client: Client; onUpdate: (id: string
 }
 
 export default function DashboardPage() {
-  const { user, clients, masters, updateClient } = useApp();
+  const { user, clients, apiUsers, syncClientResult, loadingClients } = useApp();
   const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
   const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('all');
+
+  const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
   const myClients = useMemo(() => {
     return clients.filter(c => {
@@ -203,8 +204,8 @@ export default function DashboardPage() {
   const total = myClients.length;
 
   const masterStats = useMemo(() => {
-    return masters.filter(m => m.active).map(m => {
-      const mClients = clients.filter(c => c.masterId === m.id && !c.isExcluded);
+    return masters.map(m => {
+      const mClients = clients.filter(c => c.masterId === (m.masterId || m.id) && !c.isExcluded);
       const mDone = mClients.filter(c => c.status === 'done').length;
       return {
         name: m.name.split(' ')[0] + ' ' + (m.name.split(' ')[1]?.[0] || '') + '.',
@@ -384,8 +385,14 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-2">
+          {loadingClients && filtered.length === 0 && (
+            <div className="flex items-center gap-3 text-muted-foreground py-8 justify-center">
+              <Icon name="Loader2" size={18} className="animate-spin" />
+              <span className="text-sm">Загрузка клиентов...</span>
+            </div>
+          )}
           {filtered.map(client => (
-            <ClientRow key={client.id} client={client} onUpdate={updateClient} />
+            <ClientRow key={client.id} client={client} onSync={syncClientResult} />
           ))}
           {filtered.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">

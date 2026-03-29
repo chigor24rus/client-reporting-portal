@@ -1,7 +1,14 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { MOCK_CLIENTS, MASTERS, type Client, type Master } from '@/data/mockData';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import {
+  apiLogin, apiLogout, apiGetMe,
+  apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser,
+  apiGetClients, apiUpdateClient,
+  getToken,
+} from '@/lib/api';
+import { MOCK_CLIENTS } from '@/data/mockData';
+import type { Client } from '@/data/mockData';
 
-type User = {
+export type User = {
   id: string;
   name: string;
   role: 'master' | 'admin';
@@ -9,120 +16,195 @@ type User = {
   phone: string;
 };
 
-export type Admin = {
+export type ApiUser = {
   id: string;
   name: string;
   phone: string;
-  password: string;
-  createdAt: string;
+  role: 'admin' | 'master';
+  active: boolean;
+  createdAt: string | null;
+  masterId: string | null;
 };
 
 type AppContextType = {
   user: User | null;
-  login: (phone: string, password: string) => boolean;
+  authLoading: boolean;
+  login: (phone: string, password: string) => Promise<string | null>;
   logout: () => void;
   clients: Client[];
-  masters: Master[];
-  admins: Admin[];
+  apiUsers: ApiUser[];
+  loadingUsers: boolean;
+  loadingClients: boolean;
   updateClient: (id: string, updates: Partial<Client>) => void;
-  addMaster: (master: Omit<Master, 'id'>) => void;
-  removeMaster: (id: string) => void;
-  toggleMaster: (id: string) => void;
-  addAdmin: (admin: Omit<Admin, 'id' | 'createdAt'>) => boolean;
-  removeAdmin: (id: string) => void;
-  changeAdminPassword: (id: string, newPassword: string) => void;
+  syncClientResult: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
+  refreshUsers: () => Promise<void>;
+  createUser: (payload: { name: string; phone: string; password: string; role: string }) => Promise<string | null>;
+  updateUserPassword: (id: string, password: string) => Promise<void>;
+  removeUser: (id: string) => Promise<void>;
+  toggleUserActive: (id: string, active: boolean) => Promise<void>;
+  refreshClients: () => Promise<void>;
   currentPage: string;
   setCurrentPage: (page: string) => void;
 };
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const INITIAL_ADMINS: Admin[] = [
-  { id: 'a1', name: 'Руководитель', phone: '+79000000001', password: '1234', createdAt: '2025-01-01' },
-];
+function mapApiUser(u: ApiUser): User {
+  return {
+    id: u.id,
+    name: u.name,
+    phone: u.phone,
+    role: u.role,
+    masterId: u.masterId || undefined,
+  };
+}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
-  const [masters, setMasters] = useState<Master[]>(MASTERS);
-  const [admins, setAdmins] = useState<Admin[]>(INITIAL_ADMINS);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [apiUsers, setApiUsers] = useState<ApiUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingClients, setLoadingClients] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  const MASTER_USERS: User[] = [
-    { id: 'm1', name: 'Иванов Алексей Петрович', role: 'master', masterId: '1', phone: '+79012345678' },
-    { id: 'm2', name: 'Сидорова Мария Владимировна', role: 'master', masterId: '2', phone: '+79023456789' },
-    { id: 'm3', name: 'Петров Дмитрий Сергеевич', role: 'master', masterId: '3', phone: '+79034567890' },
-  ];
-
-  const login = useCallback((phone: string, password: string): boolean => {
-    const cleanPhone = phone.replace(/\D/g, '');
-
-    const foundAdmin = admins.find(
-      a => a.phone.replace(/\D/g, '') === cleanPhone && a.password === password
-    );
-    if (foundAdmin) {
-      setUser({ id: foundAdmin.id, name: foundAdmin.name, role: 'admin', phone: foundAdmin.phone });
-      setCurrentPage('upload');
-      return true;
+  useEffect(() => {
+    if (!getToken()) {
+      setAuthLoading(false);
+      return;
     }
+    apiGetMe().then(({ status, data }) => {
+      if (status === 200) {
+        const u = (data as { user: ApiUser }).user;
+        setUser(mapApiUser(u));
+        setCurrentPage(u.role === 'admin' ? 'upload' : 'dashboard');
+      }
+    }).finally(() => setAuthLoading(false));
+  }, []);
 
-    const foundMaster = MASTER_USERS.find(u => u.phone.replace(/\D/g, '') === cleanPhone);
-    if (foundMaster && password === '1234') {
-      setUser(foundMaster);
-      setCurrentPage('dashboard');
-      return true;
+  const login = useCallback(async (phone: string, password: string): Promise<string | null> => {
+    const { status, data } = await apiLogin(phone, password);
+    if (status === 200) {
+      const u = (data as { user: ApiUser }).user;
+      setUser(mapApiUser(u));
+      setCurrentPage(u.role === 'admin' ? 'upload' : 'dashboard');
+      return null;
     }
-
-    return false;
-  }, [admins]);
+    return (data as { error: string }).error || 'Ошибка входа';
+  }, []);
 
   const logout = useCallback(() => {
+    apiLogout();
     setUser(null);
+    setApiUsers([]);
+    setClients([]);
     setCurrentPage('dashboard');
   }, []);
+
+  const refreshUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    const { status, data } = await apiGetUsers();
+    if (status === 200) {
+      setApiUsers((data as { users: ApiUser[] }).users);
+    }
+    setLoadingUsers(false);
+  }, []);
+
+  const refreshClients = useCallback(async () => {
+    setLoadingClients(true);
+    const { status, data } = await apiGetClients();
+    if (status === 200) {
+      const apiClients = (data as { clients: Record<string, unknown>[] }).clients;
+      if (apiClients.length > 0) {
+        setClients(apiClients.map(c => ({
+          id: String(c.id),
+          name: String(c.name),
+          phone: String(c.phone || ''),
+          vin: String(c.vin),
+          work: String(c.work),
+          workDate: String(c.workDate),
+          mileage: Number(c.mileage) || 0,
+          orderNumber: String(c.orderNumber || ''),
+          masterId: c.masterId ? String(c.masterId) : '1',
+          status: String(c.status) as 'pending' | 'done',
+          result: c.result ? String(c.result) : null,
+          resultNote: c.resultNote ? String(c.resultNote) : null,
+          callbackDate: c.callbackDate ? String(c.callbackDate) : null,
+          isExcluded: Boolean(c.isExcluded),
+        })));
+      } else {
+        setClients(MOCK_CLIENTS);
+      }
+    } else {
+      setClients(MOCK_CLIENTS);
+    }
+    setLoadingClients(false);
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      refreshClients();
+      if (user.role === 'admin') refreshUsers();
+    }
+  }, [user, refreshClients, refreshUsers]);
 
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   }, []);
 
-  const addMaster = useCallback((master: Omit<Master, 'id'>) => {
-    setMasters(prev => [...prev, { ...master, id: String(Date.now()) }]);
+  const syncClientResult = useCallback(async (
+    id: string, result: string, note: string, callbackDate: string
+  ) => {
+    const { status } = await apiUpdateClient(id, {
+      result,
+      result_note: note,
+      callback_date: callbackDate || undefined,
+    });
+    if (status === 200) {
+      setClients(prev => prev.map(c => c.id === id ? {
+        ...c,
+        result,
+        resultNote: note,
+        callbackDate: callbackDate || null,
+        status: 'done',
+        isExcluded: ['3', '4'].includes(result),
+      } : c));
+    }
   }, []);
 
-  const removeMaster = useCallback((id: string) => {
-    setMasters(prev => prev.filter(m => m.id !== id));
-  }, []);
+  const createUser = useCallback(async (payload: {
+    name: string; phone: string; password: string; role: string;
+  }): Promise<string | null> => {
+    const { status, data } = await apiCreateUser(payload);
+    if (status === 201) {
+      await refreshUsers();
+      return null;
+    }
+    return (data as { error: string }).error || 'Ошибка создания';
+  }, [refreshUsers]);
 
-  const toggleMaster = useCallback((id: string) => {
-    setMasters(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
-  }, []);
+  const updateUserPassword = useCallback(async (id: string, password: string) => {
+    await apiUpdateUser(id, { password });
+    await refreshUsers();
+  }, [refreshUsers]);
 
-  const addAdmin = useCallback((admin: Omit<Admin, 'id' | 'createdAt'>): boolean => {
-    const cleanPhone = admin.phone.replace(/\D/g, '');
-    const exists = admins.some(a => a.phone.replace(/\D/g, '') === cleanPhone);
-    if (exists) return false;
-    setAdmins(prev => [...prev, {
-      ...admin,
-      id: String(Date.now()),
-      createdAt: new Date().toISOString().slice(0, 10),
-    }]);
-    return true;
-  }, [admins]);
+  const removeUser = useCallback(async (id: string) => {
+    await apiDeleteUser(id);
+    await refreshUsers();
+  }, [refreshUsers]);
 
-  const removeAdmin = useCallback((id: string) => {
-    setAdmins(prev => prev.filter(a => a.id !== id));
-  }, []);
-
-  const changeAdminPassword = useCallback((id: string, newPassword: string) => {
-    setAdmins(prev => prev.map(a => a.id === id ? { ...a, password: newPassword } : a));
-  }, []);
+  const toggleUserActive = useCallback(async (id: string, active: boolean) => {
+    await apiUpdateUser(id, { active });
+    await refreshUsers();
+  }, [refreshUsers]);
 
   return (
     <AppContext.Provider value={{
-      user, login, logout,
-      clients, masters, admins,
-      updateClient, addMaster, removeMaster, toggleMaster,
-      addAdmin, removeAdmin, changeAdminPassword,
+      user, authLoading, login, logout,
+      clients, apiUsers, loadingUsers, loadingClients,
+      updateClient, syncClientResult,
+      refreshUsers, createUser, updateUserPassword, removeUser, toggleUserActive,
+      refreshClients,
       currentPage, setCurrentPage,
     }}>
       {children}

@@ -1,0 +1,17 @@
+{
+  "tests": [
+    {
+      "name": "Get all users returns 200",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Create user with missing fields returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"name": "Тест"},
+      "expectedStatus": 400
+    }
+  ]
+}
