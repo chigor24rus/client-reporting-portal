@@ -80,12 +80,15 @@ def handler(event: dict, context) -> dict:
                 parts_sql = []
                 for work, (min_m, max_m) in WORK_INTERVALS.items():
                     w = work.replace("'", "''")
+                    # next_service = work_date + min_m месяцев (плановая дата следующей замены)
+                    # urgency = ABS(next_service - NOW()) — чем меньше, тем срочнее (ближе к плану)
                     parts_sql.append(f"""
                         SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                                c.order_number, c.master_id, c.status, c.result, c.result_note,
                                c.callback_date, c.is_excluded, c.locked_by, c.locked_at,
                                u.name as locked_by_name,
-                               ROW_NUMBER() OVER (PARTITION BY c.vin ORDER BY c.work_date DESC) AS rn
+                               ROW_NUMBER() OVER (PARTITION BY c.vin ORDER BY c.work_date DESC) AS rn,
+                               ABS(EXTRACT(EPOCH FROM (c.work_date + INTERVAL '{min_m} months' - NOW()))) AS urgency_seconds
                         FROM clients c
                         LEFT JOIN users u ON u.id = c.locked_by
                         WHERE c.work = '{w}'
@@ -103,7 +106,7 @@ def handler(event: dict, context) -> dict:
                            callback_date, is_excluded, locked_by, locked_at, locked_by_name
                     FROM ({union_sql}) AS t
                     WHERE rn = 1
-                    ORDER BY work_date DESC
+                    ORDER BY urgency_seconds ASC
                 """)
 
             rows = cur.fetchall()
