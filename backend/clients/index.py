@@ -128,6 +128,7 @@ def handler(event: dict, context) -> dict:
                 FROM clients c
                 WHERE c.is_excluded = FALSE
                   AND c.status != 'done'
+                  AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
                   AND ({work_filter})
             """)
             all_rows = cur.fetchall()
