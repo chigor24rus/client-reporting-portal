@@ -24,9 +24,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-56 flex-shrink-0 border-r border-border bg-sidebar flex flex-col">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center flex-shrink-0">
-              <Icon name="Wrench" size={16} className="text-primary" />
-            </div>
+            <img
+              src="https://cdn.poehali.dev/projects/505db067-f0f2-478b-8276-f5f75d273563/bucket/c3bac887-a637-4c12-bfbf-380b7032582d.png"
+              alt="HEVSR logo"
+              className="w-9 h-9 flex-shrink-0 object-contain"
+            />
             <div>
               <p className="text-sm font-bold text-foreground leading-tight">АвтоСервис</p>
               <p className="text-xs text-muted-foreground">Портал</p>
