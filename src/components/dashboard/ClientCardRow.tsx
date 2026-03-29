@@ -62,10 +62,12 @@ function WorkRow({
             <p className="text-xs text-muted-foreground">{work.mileage?.toLocaleString()} км</p>
           </div>
           <div>
-            {work.result ? (
+            {work.result && work.status === 'done' ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">{resultLabel?.slice(0, 14) || work.result}</span>
+            ) : work.result && work.status === 'pending' ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">{resultLabel?.slice(0, 14) || work.result}</span>
             ) : (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Не обработан</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">Не обработан</span>
             )}
           </div>
         </div>

@@ -256,12 +256,15 @@ def handler(event: dict, context) -> dict:
             values = []
 
             if 'result' in body:
+                r_val = body['result']
+                # '7' — нет ответа: остаётся pending, клиент остаётся в списке для повторного звонка
+                PENDING_RESULTS = {'7'}
                 fields.append("result = %s")
-                values.append(body['result'])
+                values.append(r_val)
                 fields.append("status = %s")
-                values.append('done' if body['result'] else 'pending')
+                values.append('pending' if not r_val or r_val in PENDING_RESULTS else 'done')
                 fields.append("is_excluded = %s")
-                values.append(body['result'] in ('3', '4', '8'))
+                values.append(r_val in ('3', '4', '8'))
 
             if 'result_note' in body:
                 fields.append("result_note = %s")
