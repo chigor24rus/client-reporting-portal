@@ -10,6 +10,7 @@ const ADMIN_NAV = [
   { id: 'masters', label: 'Мастера', icon: 'Users' },
   { id: 'statistics', label: 'Статистика', icon: 'BarChart3' },
   { id: 'reports', label: 'Отчёты', icon: 'FileText' },
+  { id: 'admins', label: 'Администраторы', icon: 'ShieldCheck' },
   { id: 'integration', label: 'Интеграция 1С', icon: 'Link2' },
 ];
 

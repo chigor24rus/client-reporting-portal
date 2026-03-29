@@ -7,6 +7,7 @@ import MastersPage from '@/pages/MastersPage';
 import StatisticsPage from '@/pages/StatisticsPage';
 import ReportsPage from '@/pages/ReportsPage';
 import IntegrationPage from '@/pages/IntegrationPage';
+import AdminsPage from '@/pages/AdminsPage';
 
 function AppContent() {
   const { user, currentPage } = useApp();
@@ -20,6 +21,7 @@ function AppContent() {
       case 'masters': return <MastersPage />;
       case 'statistics': return <StatisticsPage />;
       case 'reports': return <ReportsPage />;
+      case 'admins': return <AdminsPage />;
       case 'integration': return <IntegrationPage />;
       default: return <UploadPage />;
     }
