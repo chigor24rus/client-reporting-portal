@@ -12,8 +12,8 @@ function getWorkResults(workType: string, totalActiveWorks: number) {
   const allWorkValues = new Set(Object.values(WORK_RESULT_MAP));
   return CALL_RESULTS.filter(r => {
     if (r.group === 'birthday') return false;
+    if (r.value === '1') return totalActiveWorks > 1;
     if (r.group === 'work' && allWorkValues.has(r.value)) {
-      if (r.value === '1') return totalActiveWorks > 1;
       return r.value === thisWorkValue;
     }
     return true;
