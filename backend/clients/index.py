@@ -83,12 +83,12 @@ def handler(event: dict, context) -> dict:
 
             if include_all:
                 cur.execute("""
-                    SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
+                    SELECT DISTINCT ON (c.phone, c.vin, c.work)
+                           c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                            c.order_number, c.master_id, c.status, c.result, c.result_note,
                            c.callback_date, c.is_excluded, c.birth_date, c.total_spent
                     FROM clients c
-                    WHERE c.is_excluded = FALSE
-                    ORDER BY c.work_date DESC
+                    ORDER BY c.phone, c.vin, c.work, c.work_date DESC
                 """)
                 rows = cur.fetchall()
                 clients = []
