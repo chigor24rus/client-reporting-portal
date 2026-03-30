@@ -507,7 +507,7 @@ def handler(event: dict, context) -> dict:
                 # Фиксируем мастера, который сохранил результат
                 if body.get('user_id'):
                     fields.append("master_id = %s")
-                    values.append(body['user_id'])
+                    values.append(int(body['user_id']))
 
             if 'result_note' in body:
                 fields.append("result_note = %s")
