@@ -161,7 +161,11 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
   const [locking, setLocking] = useState(false);
   const activeWorks = card.works.filter(w => !w.isUpcoming);
   const upcomingWorks = card.works.filter(w => w.isUpcoming);
-  const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
+  const allDone = card.works.length > 0 && (
+    activeWorks.length > 0
+      ? activeWorks.every(w => w.status === 'done')
+      : card.works.every(w => w.status === 'done')
+  );
 
   // Карточка заблокирована другим пользователем
   const isLockedByOther = !!card.lockedBy && card.lockedBy !== user?.id;
