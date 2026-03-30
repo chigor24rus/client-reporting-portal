@@ -100,7 +100,7 @@ export default function ReportsPage() {
 
   function getMasterName(masterId: string | null) {
     if (!masterId) return '—';
-    return apiUsers.find(m => m.id === masterId)?.name || 'Не назначен';
+    return apiUsers.find(m => m.masterId === masterId)?.name || 'Не назначен';
   }
 
   function getResultLabel(result: string | null) {
