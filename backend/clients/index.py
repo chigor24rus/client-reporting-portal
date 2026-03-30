@@ -486,6 +486,16 @@ def handler(event: dict, context) -> dict:
                 conn.commit()
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
 
+            if action == 'reset':
+                cur.execute(
+                    "UPDATE clients SET result = NULL, result_note = NULL, callback_date = NULL, status = 'pending', master_id = NULL, is_excluded = FALSE, locked_by = NULL, locked_at = NULL WHERE id = %s RETURNING id",
+                    (client_id,)
+                )
+                if not cur.fetchone():
+                    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Клиент не найден'}, ensure_ascii=False)}
+                conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
+
             return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Неизвестный action'}, ensure_ascii=False)}
 
         # ─── PATCH ?id= ─────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
+import { apiResetClient } from '@/lib/api';
 
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
@@ -57,11 +58,19 @@ function getClientVisibility(workDate: string, work: string, status: string, isE
 }
 
 export default function ReportsPage() {
-  const { clients, apiUsers } = useApp();
+  const { clients, apiUsers, refreshClients } = useApp();
   const [tab, setTab] = useState<ReportTab>('followup');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [resetting, setResetting] = useState<string | null>(null);
+
+  const handleReset = useCallback(async (id: string) => {
+    setResetting(id);
+    await apiResetClient(id);
+    await refreshClients();
+    setResetting(null);
+  }, [refreshClients]);
 
   const followup = useMemo(() =>
     clients.filter(c => {
@@ -257,6 +266,7 @@ export default function ReportsPage() {
                     <th>Мастер</th>
                     <th>Видимость</th>
                     <th>Результат</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,6 +298,22 @@ export default function ReportsPage() {
                           </div>
                         </td>
                         <td className="text-xs text-muted-foreground">{getResultLabel(c.result)}</td>
+                        <td>
+                          {c.result && (
+                            <button
+                              onClick={() => handleReset(c.id)}
+                              disabled={resetting === c.id}
+                              title="Вернуть в работу"
+                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-muted-foreground hover:text-warning hover:border-warning/40 border border-border rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {resetting === c.id
+                                ? <Icon name="Loader2" size={12} className="animate-spin" />
+                                : <Icon name="RotateCcw" size={12} />
+                              }
+                              Вернуть
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

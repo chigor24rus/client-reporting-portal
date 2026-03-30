@@ -97,6 +97,10 @@ export async function apiSearchClients(query: string) {
   return request('clients', `/?search=${encodeURIComponent(query)}`);
 }
 
+export async function apiResetClient(id: string) {
+  return request('clients', `/?id=${id}&action=reset`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 export async function apiLockClient(id: string, user_id: string) {
   return request('clients', `/?id=${id}&action=lock`, { method: 'POST', body: JSON.stringify({ user_id }) });
 }
