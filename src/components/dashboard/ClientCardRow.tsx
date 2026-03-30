@@ -38,9 +38,8 @@ function WorkRow({
 
   const workLabel = WORK_INTERVALS[work.work]?.label || work.work;
   const resultLabel = CALL_RESULTS.find(r => r.value === work.result)?.label;
-  const isPartialBooking = result.startsWith('2_') && totalActiveWorks > 1;
   const needsNote = ['3', '5', '6'].includes(result);
-  const needsCallback = result === '5' || isPartialBooking;
+  const needsCallback = result === '5';
 
   async function handleSave() {
     setSaving(true);
@@ -124,7 +123,7 @@ function WorkRow({
           {needsCallback && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                {isPartialBooking ? 'Дата созвона для выполнения оставшихся работ' : 'Дата повторного созвона'}
+                Дата повторного созвона
               </label>
               <input
                 type="date"

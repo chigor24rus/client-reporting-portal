@@ -506,14 +506,11 @@ def handler(event: dict, context) -> dict:
 
             if 'result' in body:
                 r_val = body['result']
-                callback_date_val = body.get('callback_date')
-                # pending: нет ответа, повторный созвон, частичная запись (2_*) с датой созвона
-                is_partial_booking = r_val and r_val.startswith('2_') and callback_date_val
                 PENDING_RESULTS = {'7', '5'}
                 fields.append("result = %s")
                 values.append(r_val)
                 fields.append("status = %s")
-                values.append('pending' if not r_val or r_val in PENDING_RESULTS or is_partial_booking else 'done')
+                values.append('pending' if not r_val or r_val in PENDING_RESULTS else 'done')
                 fields.append("is_excluded = %s")
                 values.append(r_val in ('3', '4', '8'))
                 # Фиксируем мастера, который сохранил результат
