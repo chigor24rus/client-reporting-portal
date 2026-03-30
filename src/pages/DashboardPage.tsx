@@ -10,7 +10,7 @@ import { apiSearchClients, apiGetMastersStats } from '@/lib/api';
 type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
 
 export default function DashboardPage() {
-  const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
+  const { clientCards, clients, apiUsers, syncClientResult, loadingClients, user } = useApp();
   const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday' | 'search'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ClientCard[]>([]);
