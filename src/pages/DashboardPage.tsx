@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
   const masterStats = useMemo(() => {
     return masters.map(m => {
-      const mClients = clients.filter(c => c.masterId === (m.masterId || m.id) && !c.isExcluded);
+      const mClients = clients.filter(c => c.masterId === m.masterId && !c.isExcluded);
       const mDone = mClients.filter(c => c.status === 'done').length;
       return {
         name: m.name.split(' ')[0] + ' ' + (m.name.split(' ')[1]?.[0] || '') + '.',
