@@ -372,10 +372,9 @@ def handler(event: dict, context) -> dict:
                     cur,
                     """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
                        VALUES %s
-                       ON CONFLICT (vin, order_number) DO UPDATE SET
+                       ON CONFLICT (vin, order_number, work) DO UPDATE SET
                            name = EXCLUDED.name,
                            phone = EXCLUDED.phone,
-                           work = EXCLUDED.work,
                            work_date = EXCLUDED.work_date,
                            mileage = EXCLUDED.mileage,
                            report_id = EXCLUDED.report_id,
