@@ -48,7 +48,7 @@ export default function StatisticsPage() {
 
     const masters = apiUsers.filter(u => u.role === 'master' && u.active);
     const byMaster = masters.map(m => {
-      const mc = all.filter(c => c.masterId === m.id);
+      const mc = all.filter(c => c.masterId === m.masterId);
       const md = mc.filter(c => c.result !== null).length;
       return {
         name: m.name.split(' ').slice(0, 2).join(' '),
