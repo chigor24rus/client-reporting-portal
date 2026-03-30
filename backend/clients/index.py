@@ -129,14 +129,30 @@ def handler(event: dict, context) -> dict:
 
             work_filter = " OR ".join(work_conditions)
 
+            # Подзапрос: для каждого (phone, work, vin) берём MAX(work_date) по всей таблице.
+            # Если последняя работа слишком свежая (не попадает в work_filter) — клиент не должен показываться.
+            max_date_conditions = []
+            for work, (min_m, max_m) in WORK_INTERVALS.items():
+                w = work.replace("'", "''")
+                max_date_conditions.append(f"c.work = '{w}'")
+            max_date_filter = " OR ".join(max_date_conditions)
+
             cur.execute(f"""
+                WITH latest AS (
+                    SELECT phone, work, vin, MAX(work_date) AS max_work_date
+                    FROM clients
+                    WHERE is_excluded = FALSE AND ({max_date_filter})
+                    GROUP BY phone, work, vin
+                )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
                        c.birth_date, c.total_spent, c.locked_by, c.locked_at,
                        u.name AS locked_by_name,
-                       ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
+                       1 AS rn
                 FROM clients c
                 LEFT JOIN users u ON u.id = c.locked_by
+                JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
+                                  AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
                   AND c.status != 'done'
                   AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
@@ -170,13 +186,21 @@ def handler(event: dict, context) -> dict:
             # 3. Отложенные: result='5', callback_date > today — скрыты из основного списка,
             #    но должны отображаться в «Ожидают» с датой созвона
             cur.execute(f"""
+                WITH latest AS (
+                    SELECT phone, work, vin, MAX(work_date) AS max_work_date
+                    FROM clients
+                    WHERE is_excluded = FALSE AND ({max_date_filter})
+                    GROUP BY phone, work, vin
+                )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
                        c.birth_date, c.total_spent, c.locked_by, c.locked_at,
                        u.name AS locked_by_name,
-                       ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
+                       1 AS rn
                 FROM clients c
                 LEFT JOIN users u ON u.id = c.locked_by
+                JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
+                                  AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
                   AND c.status != 'done'
                   AND c.result = '5'
