@@ -150,6 +150,18 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
 
   const firstWorkId = card.works[0]?.id;
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevLockedByOther = useRef(isLockedByOther);
+  const [justLocked, setJustLocked] = useState(false);
+
+  // Визуальная вспышка когда карточка только что заблокировалась другим
+  useEffect(() => {
+    if (!prevLockedByOther.current && isLockedByOther) {
+      setJustLocked(true);
+      const t = setTimeout(() => setJustLocked(false), 2000);
+      return () => clearTimeout(t);
+    }
+    prevLockedByOther.current = isLockedByOther;
+  }, [isLockedByOther]);
 
   // Heartbeat: продлеваем блокировку каждые 60 сек пока карточка открыта
   useEffect(() => {
@@ -186,7 +198,7 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
   }
 
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${isLockedByOther ? 'border-orange-500/40 opacity-60' : card.isDeferred ? 'border-blue-500/30' : card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+    <div className={`border rounded-xl overflow-hidden transition-all duration-500 ${justLocked ? 'border-orange-400 shadow-lg shadow-orange-500/30 scale-[1.01]' : isLockedByOther ? 'border-orange-500/40 opacity-60' : card.isDeferred ? 'border-blue-500/30' : card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
       <div
         className={`flex items-center gap-4 px-4 py-3 transition-colors ${isLockedByOther ? 'cursor-not-allowed bg-orange-500/5' : 'cursor-pointer hover:bg-secondary/30'} ${allDone ? 'bg-success/5' : card.isDeferred ? 'bg-blue-500/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
         onClick={handleToggle}
