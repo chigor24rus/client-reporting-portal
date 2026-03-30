@@ -6,8 +6,16 @@ import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
 import { apiSearchClients, apiGetMastersStats } from '@/lib/api';
+import { CALL_RESULTS } from '@/data/mockData';
 
 type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
+
+const RESULT_COLORS: Record<string, string> = {
+  '1': 'hsl(142 72% 42%)', '2_oil': 'hsl(200 80% 48%)', '2_brake': 'hsl(200 80% 55%)',
+  '2_gearbox': 'hsl(200 80% 62%)', '2_coolant': 'hsl(200 80% 68%)', '3': 'hsl(0 70% 50%)',
+  '4': 'hsl(0 70% 40%)', '5': 'hsl(38 92% 52%)', '6': 'hsl(38 80% 60%)',
+  '9': 'hsl(142 50% 55%)', '7': 'hsl(215 12% 52%)', '8': 'hsl(215 12% 38%)',
+};
 
 export default function DashboardPage() {
   const { clientCards, clients, apiUsers, syncClientResult, loadingClients, user } = useApp();
@@ -52,6 +60,36 @@ export default function DashboardPage() {
     });
   }, [masters, clients]);
 
+  // Персональная статистика мастера
+  const now = new Date();
+  const personalMonthStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    clientCards.flatMap(c => c.works).forEach(w => {
+      if (w.result) counts[w.result] = (counts[w.result] || 0) + 1;
+    });
+    return Object.entries(counts).map(([val, count]) => {
+      const r = CALL_RESULTS.find(r => r.value === val);
+      return { result: val, label: r?.label || val, count, color: RESULT_COLORS[val] || 'hsl(215 12% 52%)' };
+    }).filter(s => s.count > 0).sort((a, b) => b.count - a.count);
+  }, [clientCards]);
+
+  const personalQuarterStats = useMemo(() => {
+    const months = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const name = d.toLocaleDateString('ru-RU', { month: 'long' });
+      months.push({ name: name.charAt(0).toUpperCase() + name.slice(1), done: 0, pending: 0 });
+    }
+    // Пока данных по датам нет — показываем текущие итоги в последнем месяце
+    const totalDone = clientCards.flatMap(c => c.works).filter(w => w.status === 'done').length;
+    const totalPending = clientCards.flatMap(c => c.works).filter(w => w.status === 'pending' && !w.isUpcoming).length;
+    if (months.length > 0) {
+      months[months.length - 1].done = totalDone;
+      months[months.length - 1].pending = totalPending;
+    }
+    return months;
+  }, [clientCards]);
+
   const handleSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
       setSearchResults([]);
@@ -83,40 +121,11 @@ export default function DashboardPage() {
         done={done}
         total={total}
         birthdayCount={birthdayCount}
-        masterStats={masterStats}
+        currentUserId={user?.id}
+        mastersStats={mastersStats}
+        personalMonthStats={personalMonthStats}
+        personalQuarterStats={personalQuarterStats}
       />
-
-      {mastersStats.length > 0 && (
-        <div className="metric-card">
-          <p className="text-sm font-semibold text-foreground mb-4">Эффективность команды</p>
-          <div className="space-y-2.5">
-            {mastersStats.map((m, i) => {
-              const isMe = user?.id === m.userId;
-              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
-              return (
-                <div key={m.userId} className={`rounded-lg px-3 py-2.5 transition-all ${isMe ? 'bg-primary/10 border border-primary/30' : 'bg-secondary/40 border border-transparent'}`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      {medal && <span className="text-sm">{medal}</span>}
-                      <span className={`text-sm font-medium ${isMe ? 'text-primary' : 'text-foreground'}`}>
-                        {m.name}{isMe && <span className="ml-1.5 text-xs text-primary/70">(вы)</span>}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{m.done}/{m.total}</span>
-                      <span className={`font-bold text-sm ${m.rate >= 70 ? 'text-success' : m.rate >= 40 ? 'text-warning' : 'text-destructive'}`}>{m.rate}%</span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div>
         <div className="flex items-center justify-between mb-3">

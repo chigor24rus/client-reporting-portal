@@ -1,42 +1,47 @@
 import { useState } from 'react';
 import Icon from '@/components/ui/icon';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend,
-} from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
+import { CALL_RESULTS } from '@/data/mockData';
 
-const CHART_DATA_MONTH = [
-  { name: '01 мар', total: 12, done: 5 },
-  { name: '05 мар', total: 18, done: 9 },
-  { name: '10 мар', total: 24, done: 14 },
-  { name: '15 мар', total: 31, done: 20 },
-  { name: '20 мар', total: 38, done: 27 },
-  { name: '25 мар', total: 44, done: 33 },
-  { name: '29 мар', total: 48, done: 37 },
-];
-
-const CHART_DATA_QUARTER = [
-  { name: 'Январь', Иванов: 18, Сидорова: 22, Петров: 15 },
-  { name: 'Февраль', Иванов: 24, Сидорова: 19, Петров: 21 },
-  { name: 'Март', Иванов: 31, Сидорова: 28, Петров: 25 },
-];
-
-type MasterStat = {
-  name: string;
-  total: number;
-  done: number;
-  rate: number;
-};
+type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
+type PersonalStat = { result: string; label: string; count: number; color: string };
 
 type Props = {
   pending: number;
   done: number;
   total: number;
   birthdayCount: number;
-  masterStats: MasterStat[];
+  currentUserId?: string;
+  mastersStats: MasterStat[];
+  personalMonthStats: PersonalStat[];
+  personalQuarterStats: { name: string; done: number; pending: number }[];
 };
 
-export default function DashboardStats({ pending, done, total, birthdayCount, masterStats }: Props) {
-  const [chartPeriod, setChartPeriod] = useState<'month' | 'quarter'>('month');
+const RESULT_COLORS: Record<string, string> = {
+  '1': 'hsl(142 72% 42%)',
+  '2_oil': 'hsl(200 80% 48%)',
+  '2_brake': 'hsl(200 80% 55%)',
+  '2_gearbox': 'hsl(200 80% 62%)',
+  '2_coolant': 'hsl(200 80% 68%)',
+  '3': 'hsl(0 70% 50%)',
+  '4': 'hsl(0 70% 40%)',
+  '5': 'hsl(38 92% 52%)',
+  '6': 'hsl(38 80% 60%)',
+  '9': 'hsl(142 50% 55%)',
+  '7': 'hsl(215 12% 52%)',
+  '8': 'hsl(215 12% 38%)',
+  'gift_ok': 'hsl(320 70% 50%)',
+  'gift_no': 'hsl(320 50% 40%)',
+};
+
+export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, personalMonthStats, personalQuarterStats }: Props) {
+  const [leftPeriod, setLeftPeriod] = useState<'month' | 'quarter'>('month');
+  const [rightPeriod, setRightPeriod] = useState<'month' | 'quarter'>('month');
+
+  const monthMasters = mastersStats;
+  const quarterMasters = [...mastersStats].sort((a, b) => b.rate - a.rate);
+
+  const teamStats = rightPeriod === 'month' ? monthMasters : quarterMasters;
 
   return (
     <>
@@ -88,72 +93,111 @@ export default function DashboardStats({ pending, done, total, birthdayCount, ma
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        {/* Левый блок — персональная динамика */}
         <div className="metric-card">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm font-semibold text-foreground">Динамика обработки</p>
-              <p className="text-xs text-muted-foreground">За текущий месяц</p>
+              <p className="text-sm font-semibold text-foreground">Моя статистика</p>
+              <p className="text-xs text-muted-foreground">
+                {leftPeriod === 'month' ? 'За текущий месяц' : 'За текущий квартал'}
+              </p>
             </div>
             <div className="flex gap-1 bg-secondary rounded-lg p-1">
               {(['month', 'quarter'] as const).map(p => (
-                <button key={p} onClick={() => setChartPeriod(p)}
-                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${chartPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
+                <button key={p} onClick={() => setLeftPeriod(p)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${leftPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
                   {p === 'month' ? 'Месяц' : 'Квартал'}
                 </button>
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            {chartPeriod === 'month' ? (
-              <AreaChart data={CHART_DATA_MONTH}>
-                <defs>
-                  <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(200 80% 48%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(200 80% 48%)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gDone" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(142 72% 42%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(142 72% 42%)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
-                <XAxis dataKey="name" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} labelStyle={{ color: 'hsl(210 20% 88%)' }} />
-                <Area type="monotone" dataKey="total" stroke="hsl(200 80% 48%)" fill="url(#gTotal)" strokeWidth={2} name="Всего" />
-                <Area type="monotone" dataKey="done" stroke="hsl(142 72% 42%)" fill="url(#gDone)" strokeWidth={2} name="Обработано" />
-              </AreaChart>
-            ) : (
-              <BarChart data={CHART_DATA_QUARTER}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
-                <XAxis dataKey="name" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Иванов" fill="hsl(38 92% 52%)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Сидорова" fill="hsl(200 80% 48%)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Петров" fill="hsl(142 72% 42%)" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            )}
-          </ResponsiveContainer>
-        </div>
 
-        <div className="metric-card">
-          <p className="text-sm font-semibold text-foreground mb-4">Эффективность мастеров</p>
-          <div className="space-y-3">
-            {masterStats.length > 0 ? masterStats.map((m, i) => (
-              <div key={i}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-foreground">{m.name}</span>
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {m.done}/{m.total} — <span className="text-foreground font-semibold">{m.rate}%</span>
-                  </span>
-                </div>
-                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
+          {leftPeriod === 'month' ? (
+            personalMonthStats.length > 0 ? (
+              <div className="flex gap-4 items-center">
+                <ResponsiveContainer width={140} height={140}>
+                  <PieChart>
+                    <Pie data={personalMonthStats} cx="50%" cy="50%" innerRadius={38} outerRadius={60} paddingAngle={2} dataKey="count">
+                      {personalMonthStats.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 11 }}
+                      formatter={(value: number, name: string) => [value, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex-1 space-y-1.5">
+                  {personalMonthStats.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                        <span className="text-muted-foreground truncate max-w-[120px]">{s.label}</span>
+                      </div>
+                      <span className="font-semibold text-foreground ml-2">{s.count}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )) : <p className="text-sm text-muted-foreground">Нет данных</p>}
+            ) : (
+              <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет обработанных клиентов</div>
+            )
+          ) : (
+            personalQuarterStats.length > 0 ? (
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={personalQuarterStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
+                  <XAxis dataKey="name" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="done" name="Обработано" fill="hsl(142 72% 42%)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="pending" name="Ожидают" fill="hsl(38 92% 52%)" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет данных</div>
+            )
+          )}
+        </div>
+
+        {/* Правый блок — эффективность команды */}
+        <div className="metric-card">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-foreground">Эффективность команды</p>
+            <div className="flex gap-1 bg-secondary rounded-lg p-1">
+              {(['month', 'quarter'] as const).map(p => (
+                <button key={p} onClick={() => setRightPeriod(p)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${rightPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {p === 'month' ? 'Месяц' : 'Квартал'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            {teamStats.length > 0 ? teamStats.map((m, i) => {
+              const isMe = currentUserId === m.userId;
+              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
+              return (
+                <div key={m.userId} className={`rounded-lg px-3 py-2 transition-all ${isMe ? 'bg-primary/10 border border-primary/30' : 'bg-secondary/30 border border-transparent'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      {medal && <span className="text-sm">{medal}</span>}
+                      <span className={`text-xs font-medium ${isMe ? 'text-primary' : 'text-foreground'}`}>
+                        {m.name}{isMe && <span className="ml-1 text-primary/60">(вы)</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{m.done}/{m.total}</span>
+                      <span className={`text-xs font-bold ${m.rate >= 70 ? 'text-success' : m.rate >= 40 ? 'text-warning' : 'text-destructive'}`}>{m.rate}%</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
+                  </div>
+                </div>
+              );
+            }) : <p className="text-sm text-muted-foreground">Нет данных</p>}
           </div>
           <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-2 text-center">
             <div>
