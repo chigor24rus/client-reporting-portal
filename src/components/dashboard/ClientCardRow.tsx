@@ -2,12 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import type { ClientCard, WorkItem } from '@/context/AppContext';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
+import { CALL_RESULTS, WORK_INTERVALS, WORK_RESULT_MAP } from '@/data/mockData';
 import { formatBirthDate } from './ClientBirthdayRow';
 
-const WORK_RESULTS = CALL_RESULTS.filter(r => r.group !== 'birthday');
-
 type SyncFn = (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
+
+function getWorkResults(workType: string) {
+  const thisWorkValue = WORK_RESULT_MAP[workType];
+  const allWorkValues = new Set(Object.values(WORK_RESULT_MAP));
+  return CALL_RESULTS.filter(r => {
+    if (r.group === 'birthday') return false;
+    if (r.group === 'work' && allWorkValues.has(r.value)) {
+      // Показываем только "Записан: эта работа", остальные "Записан: ..." скрываем
+      return r.value === '1' || r.value === thisWorkValue;
+    }
+    return true;
+  });
+}
 
 function WorkRow({
   work,
@@ -89,7 +100,7 @@ function WorkRow({
               className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">— Выберите результат —</option>
-              {WORK_RESULTS.map(r => (
+              {getWorkResults(work.work).map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>

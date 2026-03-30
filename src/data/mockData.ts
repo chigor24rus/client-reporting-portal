@@ -12,6 +12,14 @@ export const WORK_INTERVALS: Record<string, { min: number; max: number; label: s
   [WORK_TYPES.COOLANT]:  { min: 35, max: 48, label: 'Антифриз' },
 };
 
+// Маппинг: тип работы → value результата "Записан: ..."
+export const WORK_RESULT_MAP: Record<string, string> = {
+  [WORK_TYPES.OIL]:     '2_oil',
+  [WORK_TYPES.BRAKE]:   '2_brake',
+  [WORK_TYPES.GEARBOX]: '2_gearbox',
+  [WORK_TYPES.COOLANT]: '2_coolant',
+};
+
 export const CALL_RESULTS = [
   { value: '1', label: 'Записан на выполнение всех работ', group: 'work' },
   { value: '2_oil', label: 'Записан: Масло ДВС', group: 'work' },
