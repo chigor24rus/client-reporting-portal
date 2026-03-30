@@ -88,9 +88,13 @@ export async function apiUploadTxt(filename: string, content: string) {
 }
 
 // Clients
-export async function apiGetClients(params?: { user_id?: string; status?: string; include_excluded?: string }) {
+export async function apiGetClients(params?: { user_id?: string; status?: string; include_excluded?: string; include_all?: string }) {
   const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
   return request('clients', `/${qs}`);
+}
+
+export async function apiSearchClients(query: string) {
+  return request('clients', `/?search=${encodeURIComponent(query)}`);
 }
 
 export async function apiLockClient(id: string, user_id: string) {

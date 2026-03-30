@@ -1,14 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
+import type { ClientCard } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
+import { apiSearchClients } from '@/lib/api';
 
 export default function DashboardPage() {
   const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
   const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday' | 'search'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ClientCard[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchDone, setSearchDone] = useState(false);
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
@@ -18,7 +23,6 @@ export default function DashboardPage() {
     if (filter === 'birthday') return clientCards.filter(c => c.isBirthday);
     if (filter === 'pending') return clientCards.filter(c => c.status !== 'done');
     if (filter === 'done') return clientCards.filter(c => c.status === 'done');
-    // «Все» — не показываем отложенных, они только в «Ожидают»
     return clientCards.filter(c => !c.isDeferred);
   }, [clientCards, filter]);
 
@@ -39,6 +43,30 @@ export default function DashboardPage() {
     });
   }, [masters, clients]);
 
+  const handleSearch = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setSearchResults([]);
+      setSearchDone(false);
+      return;
+    }
+    setSearchLoading(true);
+    setSearchDone(false);
+    const { status, data } = await apiSearchClients(q.trim());
+    if (status === 200) {
+      setSearchResults((data as { clients: ClientCard[] }).clients);
+    }
+    setSearchLoading(false);
+    setSearchDone(true);
+  }, []);
+
+  function onSearchChange(val: string) {
+    setSearchQuery(val);
+    if (val.trim().length < 2) {
+      setSearchResults([]);
+      setSearchDone(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <DashboardStats
@@ -53,19 +81,24 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground">
             Список клиентов
-            <span className="ml-2 text-xs font-normal text-muted-foreground">({filtered.length} записей)</span>
+            {filter !== 'search' && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">({filtered.length} записей)</span>
+            )}
           </h2>
-          <div className="flex gap-1 bg-secondary rounded-lg p-1">
+          <div className="flex gap-1 bg-secondary rounded-lg p-1 flex-wrap">
             {([
               ['all', 'Все'],
               ['pending', 'Ожидают'],
               ['done', 'Обработаны'],
               ['birthday', '🎂 Именинники'],
+              ['search', '🔍 Поиск'],
             ] as const).map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setFilter(val)}
-                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${filter === val ? (val === 'birthday' ? 'bg-pink-500/20 text-pink-300 shadow' : 'bg-card text-foreground shadow') : 'text-muted-foreground hover:text-foreground'}`}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${filter === val
+                  ? (val === 'birthday' ? 'bg-pink-500/20 text-pink-300 shadow' : 'bg-card text-foreground shadow')
+                  : 'text-muted-foreground hover:text-foreground'}`}
               >
                 {label}
               </button>
@@ -73,25 +106,89 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          {loadingClients && filtered.length === 0 && (
-            <div className="flex items-center gap-3 text-muted-foreground py-8 justify-center">
-              <Icon name="Loader2" size={18} className="animate-spin" />
-              <span className="text-sm">Загрузка клиентов...</span>
+        {filter === 'search' ? (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => onSearchChange(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch(searchQuery)}
+                  placeholder="Ф.И.О., телефон или VIN..."
+                  className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 text-foreground placeholder:text-muted-foreground"
+                  autoFocus
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setSearchResults([]); setSearchDone(false); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <Icon name="X" size={14} />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => handleSearch(searchQuery)}
+                disabled={searchQuery.trim().length < 2 || searchLoading}
+                className="px-4 py-2 bg-primary text-primary-foreground text-sm font-semibold rounded-xl disabled:opacity-50 hover:bg-primary/90 transition-all flex items-center gap-2"
+              >
+                {searchLoading && <Icon name="Loader2" size={14} className="animate-spin" />}
+                Найти
+              </button>
             </div>
-          )}
-          {filtered.map((card, i) => (
-            card.isBirthday && card.works.length === 0
-              ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
-              : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
-          ))}
-          {!loadingClients && filtered.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <Icon name="Inbox" size={32} className="mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Нет записей</p>
-            </div>
-          )}
-        </div>
+
+            {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+              <p className="text-sm text-muted-foreground text-center py-4">Введите минимум 2 символа</p>
+            )}
+
+            {searchLoading && (
+              <div className="flex items-center gap-3 text-muted-foreground py-8 justify-center">
+                <Icon name="Loader2" size={18} className="animate-spin" />
+                <span className="text-sm">Поиск...</span>
+              </div>
+            )}
+
+            {!searchLoading && searchDone && searchResults.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Icon name="UserX" size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Клиент не найден</p>
+              </div>
+            )}
+
+            {!searchLoading && searchResults.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground px-1">Найдено: {searchResults.length}</p>
+                {searchResults.map((card, i) => (
+                  card.isBirthday && card.works.length === 0
+                    ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+                    : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {loadingClients && filtered.length === 0 && (
+              <div className="flex items-center gap-3 text-muted-foreground py-8 justify-center">
+                <Icon name="Loader2" size={18} className="animate-spin" />
+                <span className="text-sm">Загрузка клиентов...</span>
+              </div>
+            )}
+            {filtered.map((card, i) => (
+              card.isBirthday && card.works.length === 0
+                ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+                : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+            ))}
+            {!loadingClients && filtered.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Icon name="Inbox" size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Нет записей</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
