@@ -346,6 +346,7 @@ export default function ReportsPage() {
                   <th>Результат</th>
                   {tab === 'followup' && <th>Комментарий</th>}
                   {tab === 'summary' && <th>Дата созвона</th>}
+                  {tab === 'excluded' && <th>Комментарий</th>}
                 </tr>
               </thead>
               <tbody>
@@ -368,6 +369,9 @@ export default function ReportsPage() {
                     )}
                     {tab === 'summary' && (
                       <td className="text-xs text-muted-foreground">{c.callbackDate || '—'}</td>
+                    )}
+                    {tab === 'excluded' && (
+                      <td className="text-xs text-muted-foreground max-w-[160px] truncate">{c.resultNote || '—'}</td>
                     )}
                   </tr>
                 ))}
