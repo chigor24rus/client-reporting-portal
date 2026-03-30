@@ -2,7 +2,7 @@
 Управление клиентами.
 GET / — список клиентов для мастера: работы в окне + именинники (±7 дней, total_spent > 10000)
 GET /?include_all=true — плоский список для админа
-PATCH /?id= — обновить результат по конкретной записи
+PATCH /?id= — обновить результат, фиксирует master_id = locked_by
 """
 import json
 import os
@@ -118,6 +118,8 @@ def handler(event: dict, context) -> dict:
 
             # 1. Клиенты с предстоящими/просроченными работами
             work_conditions = []
+            work_conditions_no_alias = []
+            max_date_conditions = []
             for work, (min_m, max_m) in WORK_INTERVALS.items():
                 w = work.replace("'", "''")
                 upcoming_min = max(0, min_m - UPCOMING_MONTHS)
@@ -126,22 +128,20 @@ def handler(event: dict, context) -> dict:
                      AND c.work_date < NOW() - INTERVAL '{upcoming_min} months'
                      AND c.work_date >= NOW() - INTERVAL '{max_m} months')
                 """)
-
+                work_conditions_no_alias.append(f"""
+                    (work = '{w}'
+                     AND work_date < NOW() - INTERVAL '{upcoming_min} months'
+                     AND work_date >= NOW() - INTERVAL '{max_m} months')
+                """)
+                max_date_conditions.append(f"work = '{w}'")
             work_filter = " OR ".join(work_conditions)
-
-            # Подзапрос: для каждого (phone, work, vin) берём MAX(work_date) по всей таблице.
-            # Если последняя работа слишком свежая (не попадает в work_filter) — клиент не должен показываться.
-            max_date_conditions = []
-            for work, (min_m, max_m) in WORK_INTERVALS.items():
-                w = work.replace("'", "''")
-                max_date_conditions.append(f"c.work = '{w}'")
-            max_date_filter = " OR ".join(max_date_conditions)
+            work_filter_no_alias = " OR ".join(work_conditions_no_alias)
 
             cur.execute(f"""
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE AND ({max_date_filter})
+                    WHERE is_excluded = FALSE AND ({work_filter_no_alias})
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -189,7 +189,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE AND ({max_date_filter})
+                    WHERE is_excluded = FALSE AND ({work_filter_no_alias})
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -415,6 +415,8 @@ def handler(event: dict, context) -> dict:
                 values.append('pending' if not r_val or r_val in PENDING_RESULTS else 'done')
                 fields.append("is_excluded = %s")
                 values.append(r_val in ('3', '4', '8'))
+                # Фиксируем мастера, который сохранил результат
+                fields.append("master_id = locked_by")
 
             if 'result_note' in body:
                 fields.append("result_note = %s")

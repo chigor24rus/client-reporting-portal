@@ -13,11 +13,14 @@ const RESULT_COLORS: Record<string, string> = {
   '2_brake': 'hsl(200 80% 55%)',
   '2_gearbox': 'hsl(200 80% 62%)',
   '2_coolant': 'hsl(200 80% 68%)',
+  'gift_ok': 'hsl(320 70% 50%)',
+  'gift_no': 'hsl(320 50% 40%)',
   '3': 'hsl(0 70% 50%)',
   '4': 'hsl(0 70% 40%)',
   '5': 'hsl(38 92% 52%)',
   '6': 'hsl(38 80% 60%)',
   '7': 'hsl(215 12% 52%)',
+  '8': 'hsl(215 12% 38%)',
 };
 
 export default function StatisticsPage() {
@@ -44,7 +47,7 @@ export default function StatisticsPage() {
 
     const masters = apiUsers.filter(u => u.role === 'master' && u.active);
     const byMaster = masters.map(m => {
-      const mc = all.filter(c => c.masterId === (m.masterId || m.id));
+      const mc = all.filter(c => c.masterId === m.id);
       const md = mc.filter(c => c.result !== null).length;
       return {
         name: m.name.split(' ').slice(0, 2).join(' '),
