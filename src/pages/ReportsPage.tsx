@@ -6,7 +6,7 @@ import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
-const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7'];
+const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7', '9'];
 const EXCLUDE_RESULTS = ['3', '4'];
 const UPCOMING_MONTHS = 3;
 
