@@ -539,10 +539,26 @@ def handler(event: dict, context) -> dict:
             values.append(client_id)
 
             cur.execute(
-                f"UPDATE clients SET {', '.join(fields)} WHERE id = %s RETURNING id, status, result, is_excluded",
+                f"UPDATE clients SET {', '.join(fields)} WHERE id = %s RETURNING id, status, result, is_excluded, phone",
                 values
             )
             updated = cur.fetchone()
+
+            # Если «Записан на выполнение всех работ» — закрываем все остальные работы клиента
+            if updated and body.get('result') == '1':
+                master_id_val = None
+                if body.get('user_id'):
+                    cur.execute("SELECT id FROM masters WHERE user_id = %s", (int(body['user_id']),))
+                    mr = cur.fetchone()
+                    if mr:
+                        master_id_val = mr['id']
+                cur.execute(
+                    """UPDATE clients SET result = '1', status = 'done', is_excluded = FALSE,
+                       master_id = COALESCE(%s, master_id), updated_at = NOW()
+                       WHERE phone = %s AND id != %s AND status = 'pending' AND is_excluded = FALSE""",
+                    (master_id_val, updated['phone'], client_id)
+                )
+
             conn.commit()
 
             if not updated:
