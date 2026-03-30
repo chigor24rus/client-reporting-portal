@@ -1,11 +1,13 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import type { ClientCard } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
-import { apiSearchClients } from '@/lib/api';
+import { apiSearchClients, apiGetMastersStats } from '@/lib/api';
+
+type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
 
 export default function DashboardPage() {
   const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
@@ -14,6 +16,13 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<ClientCard[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
+
+  useEffect(() => {
+    apiGetMastersStats().then(({ status, data }) => {
+      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
+    });
+  }, []);
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
@@ -76,6 +85,38 @@ export default function DashboardPage() {
         birthdayCount={birthdayCount}
         masterStats={masterStats}
       />
+
+      {mastersStats.length > 0 && (
+        <div className="metric-card">
+          <p className="text-sm font-semibold text-foreground mb-4">Эффективность команды</p>
+          <div className="space-y-2.5">
+            {mastersStats.map((m, i) => {
+              const isMe = user?.id === m.userId;
+              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
+              return (
+                <div key={m.userId} className={`rounded-lg px-3 py-2.5 transition-all ${isMe ? 'bg-primary/10 border border-primary/30' : 'bg-secondary/40 border border-transparent'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      {medal && <span className="text-sm">{medal}</span>}
+                      <span className={`text-sm font-medium ${isMe ? 'text-primary' : 'text-foreground'}`}>
+                        {m.name}{isMe && <span className="ml-1.5 text-xs text-primary/70">(вы)</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{m.done}/{m.total}</span>
+                      <span className={`font-bold text-sm ${m.rate >= 70 ? 'text-success' : m.rate >= 40 ? 'text-warning' : 'text-destructive'}`}>{m.rate}%</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${m.rate}%`, background: m.rate >= 70 ? 'hsl(142 72% 42%)' : m.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-3">

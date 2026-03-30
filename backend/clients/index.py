@@ -82,6 +82,33 @@ def handler(event: dict, context) -> dict:
             include_all = qs.get('include_all', 'false') == 'true'
             search_query = qs.get('search', '').strip()
 
+            # ─── Статистика мастеров (для виджета на дашборде) ──────────────
+            if qs.get('masters_stats') == 'true':
+                cur.execute("""
+                    SELECT u.id as user_id, u.name,
+                           COUNT(c.id) as total,
+                           COUNT(c.id) FILTER (WHERE c.result IS NOT NULL) as done
+                    FROM users u
+                    JOIN masters m ON m.user_id = u.id
+                    LEFT JOIN clients c ON c.master_id = m.id AND c.is_excluded = FALSE
+                    WHERE u.role = 'master' AND u.active = TRUE
+                    GROUP BY u.id, u.name
+                    ORDER BY done DESC, total DESC
+                """)
+                rows = cur.fetchall()
+                stats = []
+                for r in rows:
+                    total = r['total'] or 0
+                    done = r['done'] or 0
+                    stats.append({
+                        'userId': str(r['user_id']),
+                        'name': ' '.join(r['name'].split()[:2]),
+                        'total': total,
+                        'done': done,
+                        'rate': round((done / total * 100)) if total else 0,
+                    })
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': stats}, ensure_ascii=False)}
+
             # ─── Поиск по всей базе (для мастера) ───────────────────────────
             if search_query and len(search_query) >= 2:
                 q = f'%{search_query.lower()}%'
