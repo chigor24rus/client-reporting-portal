@@ -35,6 +35,8 @@ export type ClientCard = {
   cardCallbackDate?: string | null;
   works: WorkItem[];
   status: 'pending' | 'done';
+  lockedBy?: string | null;
+  lockedAt?: string | null;
 };
 
 export type User = {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ClientCard, WorkItem } from '@/context/AppContext';
+import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import { formatBirthDate } from './ClientBirthdayRow';
@@ -133,20 +134,40 @@ type CardProps = {
 };
 
 export default function ClientCardRow({ card, onSync }: CardProps) {
+  const { lockClient, unlockClient, user } = useApp();
   const [expanded, setExpanded] = useState(false);
+  const [locking, setLocking] = useState(false);
   const activeWorks = card.works.filter(w => !w.isUpcoming);
   const upcomingWorks = card.works.filter(w => w.isUpcoming);
   const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
+
+  // Карточка заблокирована другим пользователем
+  const isLockedByOther = !!card.lockedBy && card.lockedBy !== user?.id;
 
   const deferredLabel = card.cardCallbackDate
     ? new Date(card.cardCallbackDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
     : null;
 
+  const firstWorkId = card.works[0]?.id;
+
+  async function handleToggle() {
+    if (isLockedByOther || !firstWorkId) return;
+    if (!expanded) {
+      setLocking(true);
+      const ok = await lockClient(firstWorkId);
+      setLocking(false);
+      if (ok) setExpanded(true);
+    } else {
+      setExpanded(false);
+      await unlockClient(firstWorkId);
+    }
+  }
+
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${card.isDeferred ? 'border-blue-500/30' : card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
+    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${isLockedByOther ? 'border-orange-500/40 opacity-60' : card.isDeferred ? 'border-blue-500/30' : card.isBirthday ? 'border-pink-500/30' : 'border-border'} ${expanded ? 'shadow-lg shadow-black/20' : ''}`}>
       <div
-        className={`flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors ${allDone ? 'bg-success/5' : card.isDeferred ? 'bg-blue-500/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
-        onClick={() => setExpanded(!expanded)}
+        className={`flex items-center gap-4 px-4 py-3 transition-colors ${isLockedByOther ? 'cursor-not-allowed bg-orange-500/5' : 'cursor-pointer hover:bg-secondary/30'} ${allDone ? 'bg-success/5' : card.isDeferred ? 'bg-blue-500/5' : card.isBirthday ? 'bg-pink-500/5' : 'bg-card'}`}
+        onClick={handleToggle}
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -181,8 +202,19 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
             <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Не обработан</span>
           )}
         </div>
-        <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted-foreground flex-shrink-0" />
+        {isLockedByOther ? (
+          <Icon name="Lock" size={16} className="text-orange-400 flex-shrink-0" />
+        ) : locking ? (
+          <Icon name="Loader2" size={16} className="text-muted-foreground flex-shrink-0 animate-spin" />
+        ) : (
+          <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted-foreground flex-shrink-0" />
+        )}
       </div>
+      {isLockedByOther && (
+        <div className="px-4 py-1.5 bg-orange-500/10 border-t border-orange-500/20 text-xs text-orange-400">
+          Карточка открыта другим мастером
+        </div>
+      )}
 
       {expanded && (
         <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border animate-fade-in space-y-2">

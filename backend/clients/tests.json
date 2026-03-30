@@ -12,6 +12,20 @@
       "path": "/",
       "body": {},
       "expectedStatus": 405
+    },
+    {
+      "name": "Lock without id returns 405",
+      "method": "POST",
+      "path": "/?action=lock",
+      "body": {"user_id": "1"},
+      "expectedStatus": 405
+    },
+    {
+      "name": "Unknown action returns 400",
+      "method": "POST",
+      "path": "/?id=999&action=foo",
+      "body": {"user_id": "1"},
+      "expectedStatus": 400
     }
   ]
 }

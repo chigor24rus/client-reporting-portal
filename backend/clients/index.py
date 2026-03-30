@@ -123,7 +123,7 @@ def handler(event: dict, context) -> dict:
             cur.execute(f"""
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
-                       c.birth_date, c.total_spent,
+                       c.birth_date, c.total_spent, c.locked_by, c.locked_at,
                        ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
                 FROM clients c
                 WHERE c.is_excluded = FALSE
@@ -161,7 +161,7 @@ def handler(event: dict, context) -> dict:
             cur.execute(f"""
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
-                       c.birth_date, c.total_spent,
+                       c.birth_date, c.total_spent, c.locked_by, c.locked_at,
                        ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
                 FROM clients c
                 WHERE c.is_excluded = FALSE
@@ -188,6 +188,8 @@ def handler(event: dict, context) -> dict:
                         'birth_date': r['birth_date'],
                         'total_spent': float(r['total_spent']) if r['total_spent'] else None,
                         'is_birthday': False,
+                        'locked_by': str(r['locked_by']) if r['locked_by'] else None,
+                        'locked_at': r['locked_at'].isoformat() if r['locked_at'] else None,
                     }
 
                 work = r['work']
@@ -284,6 +286,8 @@ def handler(event: dict, context) -> dict:
             for g in groups.values():
                 g.setdefault('is_deferred', False)
                 g.setdefault('callback_date', None)
+                g.setdefault('locked_by', None)
+                g.setdefault('locked_at', None)
 
             # Сортируем: сначала с работами по срочности, потом только именинники
             sorted_groups = sorted(
@@ -313,9 +317,46 @@ def handler(event: dict, context) -> dict:
                     'isBirthday': g['is_birthday'],
                     'isDeferred': g['is_deferred'],
                     'cardCallbackDate': g['callback_date'].strftime('%Y-%m-%d') if g['callback_date'] else None,
+                    'lockedBy': g['locked_by'],
+                    'lockedAt': g['locked_at'],
                 })
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}
+
+        # ─── POST ?id=&action=lock|unlock ───────────────────────────────────
+        if method == 'POST' and client_id:
+            body = json.loads(event.get('body') or '{}')
+            action = qs.get('action')
+            user_id = body.get('user_id')
+
+            if action == 'lock':
+                # Проверяем, не заблокирована ли уже другим
+                cur.execute(
+                    "SELECT locked_by FROM clients WHERE id = %s",
+                    (client_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Клиент не найден'}, ensure_ascii=False)}
+                locked_by = row['locked_by']
+                if locked_by and str(locked_by) != str(user_id):
+                    return {'statusCode': 409, 'headers': CORS, 'body': json.dumps({'error': 'Карточка уже открыта другим мастером'}, ensure_ascii=False)}
+                cur.execute(
+                    "UPDATE clients SET locked_by = %s, locked_at = NOW() WHERE id = %s",
+                    (user_id, client_id)
+                )
+                conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
+
+            if action == 'unlock':
+                cur.execute(
+                    "UPDATE clients SET locked_by = NULL, locked_at = NULL WHERE id = %s AND (locked_by = %s OR locked_by IS NULL)",
+                    (client_id, user_id)
+                )
+                conn.commit()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
+
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Неизвестный action'}, ensure_ascii=False)}
 
         # ─── PATCH ?id= ─────────────────────────────────────────────────────
         if method == 'PATCH' and client_id:
