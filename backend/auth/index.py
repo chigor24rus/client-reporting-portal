@@ -1,6 +1,6 @@
 """
 Авторизация пользователей по номеру телефона и паролю.
-Возвращает данные пользователя и сессионный токен.
+Сессии хранятся в таблице sessions (PostgreSQL).
 """
 import json
 import os
@@ -11,12 +11,9 @@ import psycopg2
 
 CORS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Session-Id',
 }
-
-# Простое in-memory хранилище сессий (для MVP)
-_sessions: dict = {}
 
 
 def hash_password(password: str) -> str:
@@ -28,95 +25,119 @@ def get_conn():
 
 
 def handler(event: dict, context) -> dict:
+    """Авторизация: POST — вход, GET — проверка токена, DELETE — выход."""
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
     method = event.get('httpMethod', 'GET')
+    conn = get_conn()
+    cur = conn.cursor()
 
-    # POST /login
-    if method == 'POST':
-        body = json.loads(event.get('body') or '{}')
-        phone = (body.get('phone') or '').strip()
-        password = (body.get('password') or '').strip()
+    try:
+        # POST /login
+        if method == 'POST':
+            body = json.loads(event.get('body') or '{}')
+            phone = (body.get('phone') or '').strip()
+            password = (body.get('password') or '').strip()
 
-        if not phone or not password:
-            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Введите телефон и пароль'}, ensure_ascii=False)}
+            if not phone or not password:
+                return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Введите телефон и пароль'}, ensure_ascii=False)}
 
-        clean_phone = ''.join(c for c in phone if c.isdigit())
+            clean_phone = ''.join(c for c in phone if c.isdigit())
 
-        conn = get_conn()
-        cur = conn.cursor()
+            cur.execute(
+                "SELECT id, name, phone, password_hash, role, active FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = %s",
+                (clean_phone,)
+            )
+            row = cur.fetchone()
 
-        # Ищем пользователя по телефону
-        cur.execute(
-            "SELECT id, name, phone, password_hash, role, active FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = %s",
-            (clean_phone,)
-        )
-        row = cur.fetchone()
+            if not row:
+                return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный номер телефона или пароль'}, ensure_ascii=False)}
 
-        if not row:
-            conn.close()
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный номер телефона или пароль'}, ensure_ascii=False)}
+            user_id, name, user_phone, password_hash, role, active = row
 
-        user_id, name, user_phone, password_hash, role, active = row
+            if not active:
+                return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Учётная запись отключена'}, ensure_ascii=False)}
 
-        if not active:
-            conn.close()
-            return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Учётная запись отключена'}, ensure_ascii=False)}
+            pwd_ok = (password == password_hash) or (hash_password(password) == password_hash)
+            if not pwd_ok:
+                return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный номер телефона или пароль'}, ensure_ascii=False)}
 
-        # Проверяем пароль — plain или hash
-        pwd_ok = (password == password_hash) or (hash_password(password) == password_hash)
-        if not pwd_ok:
-            conn.close()
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный номер телефона или пароль'}, ensure_ascii=False)}
+            master_id = None
+            if role == 'master':
+                cur.execute("SELECT id FROM masters WHERE user_id = %s", (user_id,))
+                m = cur.fetchone()
+                if m:
+                    master_id = m[0]
 
-        # Получаем master_id если мастер
-        master_id = None
-        if role == 'master':
-            cur.execute("SELECT id FROM masters WHERE user_id = %s", (user_id,))
-            m = cur.fetchone()
-            if m:
-                master_id = m[0]
+            cur.execute(
+                "INSERT INTO audit_log (user_id, action, entity) VALUES (%s, %s, %s)",
+                (user_id, 'login', 'users')
+            )
 
-        # Логируем вход
-        cur.execute(
-            "INSERT INTO audit_log (user_id, action, entity) VALUES (%s, %s, %s)",
-            (user_id, 'login', 'users')
-        )
-        conn.commit()
+            token = secrets.token_hex(32)
+            cur.execute(
+                """INSERT INTO sessions (token, user_id, user_name, user_phone, role, master_id)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (token, user_id, name, user_phone, role, master_id)
+            )
+            conn.commit()
+
+            return {
+                'statusCode': 200,
+                'headers': CORS,
+                'body': json.dumps({
+                    'token': token,
+                    'user': {
+                        'id': str(user_id),
+                        'name': name,
+                        'phone': user_phone,
+                        'role': role,
+                        'master_id': str(master_id) if master_id else None,
+                    },
+                }, ensure_ascii=False)
+            }
+
+        # GET /me — проверка токена
+        if method == 'GET':
+            token = (event.get('headers') or {}).get('X-Session-Id', '')
+            if not token:
+                return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'}, ensure_ascii=False)}
+
+            cur.execute(
+                """UPDATE sessions SET last_used_at = NOW()
+                   WHERE token = %s
+                   RETURNING user_id, user_name, user_phone, role, master_id""",
+                (token,)
+            )
+            row = cur.fetchone()
+            conn.commit()
+
+            if not row:
+                return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'}, ensure_ascii=False)}
+
+            user_id, name, user_phone, role, master_id = row
+            return {
+                'statusCode': 200,
+                'headers': CORS,
+                'body': json.dumps({'user': {
+                    'id': str(user_id),
+                    'name': name,
+                    'phone': user_phone,
+                    'role': role,
+                    'master_id': str(master_id) if master_id else None,
+                }}, ensure_ascii=False)
+            }
+
+        # DELETE /logout
+        if method == 'DELETE':
+            token = (event.get('headers') or {}).get('X-Session-Id', '')
+            if token:
+                cur.execute("UPDATE sessions SET last_used_at = NOW() WHERE token = %s", (token,))
+                conn.commit()
+            return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
+
+        return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'}, ensure_ascii=False)}
+
+    finally:
         conn.close()
-
-        # Создаём сессионный токен
-        token = secrets.token_hex(32)
-        _sessions[token] = {
-            'id': str(user_id),
-            'name': name,
-            'phone': user_phone,
-            'role': role,
-            'master_id': str(master_id) if master_id else None,
-        }
-
-        return {
-            'statusCode': 200,
-            'headers': CORS,
-            'body': json.dumps({
-                'token': token,
-                'user': _sessions[token],
-            }, ensure_ascii=False)
-        }
-
-    # GET /me — проверка токена
-    if method == 'GET':
-        token = (event.get('headers') or {}).get('X-Session-Id', '')
-        user = _sessions.get(token)
-        if not user:
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'}, ensure_ascii=False)}
-        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'user': user}, ensure_ascii=False)}
-
-    # DELETE /logout
-    if method == 'DELETE':
-        token = (event.get('headers') or {}).get('X-Session-Id', '')
-        _sessions.pop(token, None)
-        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True}, ensure_ascii=False)}
-
-    return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'}, ensure_ascii=False)}

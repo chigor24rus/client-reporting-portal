@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS sessions (
+  token VARCHAR(64) PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  user_name VARCHAR(255) NOT NULL,
+  user_phone VARCHAR(30) NOT NULL,
+  role VARCHAR(20) NOT NULL,
+  master_id INTEGER,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
