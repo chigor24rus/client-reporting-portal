@@ -80,10 +80,22 @@ export default function ReportsPage() {
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q || q.length < 2) return [];
-    return clients.filter(c =>
+
+    const matched = clients.filter(c =>
       c.name.toLowerCase().includes(q) ||
       (c.vin && c.vin.toLowerCase().includes(q))
     );
+
+    // Оставляем только самую свежую запись по каждой связке (vin + work)
+    const latestMap = new Map<string, typeof matched[0]>();
+    for (const c of matched) {
+      const key = `${c.vin}__${c.work}`;
+      const existing = latestMap.get(key);
+      if (!existing || (c.workDate && c.workDate > existing.workDate)) {
+        latestMap.set(key, c);
+      }
+    }
+    return Array.from(latestMap.values());
   }, [clients, searchQuery]);
 
   function getMasterName(masterId: string | null) {
