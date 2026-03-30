@@ -28,7 +28,7 @@ export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
 
   const summary = useMemo(() => {
-    const all = (clients ?? []).filter(c => !c.isExcluded);
+    const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
     const total = all.length;
     const done = all.filter(c => c.result !== null).length;
     const pending = all.filter(c => c.result === null).length;

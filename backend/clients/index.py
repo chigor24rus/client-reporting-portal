@@ -215,7 +215,7 @@ def handler(event: dict, context) -> dict:
                     SELECT DISTINCT ON (c.phone, c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                            c.order_number, c.master_id, c.status, c.result, c.result_note,
-                           c.callback_date, c.is_excluded, c.birth_date, c.total_spent
+                           c.callback_date, c.is_excluded, c.birth_date, c.total_spent, c.is_test
                     FROM clients c
                     ORDER BY c.phone, c.vin, c.work, c.work_date DESC
                 """)
@@ -239,6 +239,7 @@ def handler(event: dict, context) -> dict:
                         'isExcluded': r['is_excluded'],
                         'birthDate': r['birth_date'].strftime('%Y-%m-%d') if r['birth_date'] else None,
                         'totalSpent': float(r['total_spent']) if r['total_spent'] else None,
+                        'isTest': bool(r['is_test']),
                     })
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients}, ensure_ascii=False)}
 

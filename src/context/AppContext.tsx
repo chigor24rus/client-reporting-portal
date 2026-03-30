@@ -179,6 +179,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             isExcluded: Boolean(c.isExcluded),
             birthDate: c.birthDate ? String(c.birthDate) : null,
             totalSpent: c.totalSpent ? Number(c.totalSpent) : null,
+            isTest: Boolean(c.isTest),
           })));
           setClientCards([]);
         }
