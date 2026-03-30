@@ -506,8 +506,11 @@ def handler(event: dict, context) -> dict:
                 values.append(r_val in ('3', '4', '8'))
                 # Фиксируем мастера, который сохранил результат
                 if body.get('user_id'):
-                    fields.append("master_id = %s")
-                    values.append(int(body['user_id']))
+                    cur.execute("SELECT id FROM masters WHERE user_id = %s", (int(body['user_id']),))
+                    master_row = cur.fetchone()
+                    if master_row:
+                        fields.append("master_id = %s")
+                        values.append(master_row['id'])
 
             if 'result_note' in body:
                 fields.append("result_note = %s")
