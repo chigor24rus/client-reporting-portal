@@ -53,7 +53,9 @@ def detect_format(text: str) -> str:
 
 
 def parse_orders_txt(text: str) -> list:
-    """Парсит формат «История по заказ-нарядам» (с VIN)."""
+    """Парсит формат «История по заказ-нарядам» (с VIN).
+    Один клиент может иметь несколько заказ-нарядов подряд — все читаются.
+    """
     lines = [l.strip() for l in text.splitlines()]
 
     work_type = None
@@ -79,34 +81,40 @@ def parse_orders_txt(text: str) -> list:
                 if vin_m:
                     vin = vin_m.group(1).strip()[:17]
 
-            order_number = None
-            work_date = None
-            if i + 2 < len(lines):
-                order_m = re.search(r'Заказ-наряд\s+(\S+)\s+от\s+(\d{2}\.\d{2}\.\d{4})', lines[i + 2])
-                if order_m:
-                    order_number = order_m.group(1).strip()
-                    try:
-                        work_date = datetime.strptime(order_m.group(2), '%d.%m.%Y').date()
-                    except ValueError:
-                        pass
+            # Читаем все заказ-наряды этого клиента подряд (начиная с i+2)
+            j = i + 2
+            while j < len(lines):
+                order_m = re.search(r'Заказ-наряд\s+(\S+)\s+от\s+(\d{2}\.\d{2}\.\d{4})', lines[j])
+                if not order_m:
+                    break
 
-            mileage = None
-            if i + 4 < len(lines):
-                mileage_line = lines[i + 4].replace('\xa0', '').replace(' ', '')
-                if mileage_line.isdigit():
-                    mileage = int(mileage_line)
+                order_number = order_m.group(1).strip()
+                try:
+                    work_date = datetime.strptime(order_m.group(2), '%d.%m.%Y').date()
+                except ValueError:
+                    j += 3
+                    continue
 
-            if vin and work_date and order_number:
-                clients.append({
-                    'name': name,
-                    'phone': phone,
-                    'vin': vin,
-                    'work': work_type or 'Неизвестно',
-                    'work_date': work_date,
-                    'mileage': mileage,
-                    'order_number': order_number,
-                })
-            i += 5
+                mileage = None
+                if j + 2 < len(lines):
+                    mileage_line = lines[j + 2].replace('\xa0', '').replace(' ', '')
+                    if mileage_line.isdigit():
+                        mileage = int(mileage_line)
+
+                if vin and work_date and order_number:
+                    clients.append({
+                        'name': name,
+                        'phone': phone,
+                        'vin': vin,
+                        'work': work_type or 'Неизвестно',
+                        'work_date': work_date,
+                        'mileage': mileage,
+                        'order_number': order_number,
+                    })
+
+                j += 3  # Заказ-наряд, название работы, пробег
+
+            i = j  # переходим к следующему клиенту
         else:
             i += 1
 
