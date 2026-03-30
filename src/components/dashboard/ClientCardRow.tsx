@@ -48,9 +48,12 @@ function WorkRow({
     setExpanded(false);
   }
 
-  if (work.isUpcoming) {
+  if (work.isUpcoming && work.status !== 'done' && !expanded) {
     return (
-      <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary/40 border border-dashed border-border">
+      <div
+        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary/40 border border-dashed border-border cursor-pointer hover:bg-secondary/60 transition-colors"
+        onClick={() => setExpanded(true)}
+      >
         <Icon name="Clock" size={14} className="text-muted-foreground flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <span className="text-xs font-medium text-foreground">{workLabel}</span>
@@ -58,6 +61,7 @@ function WorkRow({
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Предстоящие</span>
         <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(work.workDate).toLocaleDateString('ru-RU')}</span>
+        <Icon name="ChevronDown" size={14} className="text-muted-foreground flex-shrink-0" />
       </div>
     );
   }
