@@ -327,15 +327,8 @@ def handler(event: dict, context) -> dict:
             )
             report_id = cur.fetchone()[0]
 
-            # Ищем существующие записи по VIN+номер заказа
-            vins = list({c['vin'] for c in clients})
-            cur.execute(
-                "SELECT id, vin, order_number FROM clients WHERE vin = ANY(%s)",
-                (vins,)
-            )
-            existing_map = {(r[1], r[2]): r[0] for r in cur.fetchall()}
-
-            # Ищем клиентов-«заглушек» NO_VIN по телефону/имени (добавленных из сводного файла)
+            # Батчевый UPSERT: INSERT ... ON CONFLICT (vin, order_number) DO UPDATE
+            # Это заменяет цикл с отдельными UPDATE/INSERT — в разы быстрее для больших файлов
             phones_in_file = list({c['phone'] for c in clients if c['phone']})
             cur.execute(
                 "SELECT DISTINCT ON (phone) id, phone FROM clients WHERE phone = ANY(%s) AND vin = %s ORDER BY phone, id",
@@ -343,56 +336,54 @@ def handler(event: dict, context) -> dict:
             )
             novin_by_phone = {r[1]: r[0] for r in cur.fetchall()}
 
-            # По именам для тех, кого не нашли по телефону
-            names_in_file = list({normalize_name(c['name']) for c in clients})
             cur.execute(
                 "SELECT DISTINCT ON (lower(trim(name))) id, name FROM clients WHERE vin = %s ORDER BY lower(trim(name)), id",
                 (NO_VIN,)
             )
             novin_by_name = {normalize_name(r[1]): r[0] for r in cur.fetchall()}
 
-            added = 0
-            updated = 0
-            to_insert = []
+            # Клиентов-заглушек NO_VIN обновляем батчем
+            to_update_novin = []
+            to_upsert = []
 
             for c in clients:
-                key = (c['vin'], c['order_number'])
-                if key in existing_map:
-                    # Обычное обновление
-                    cur.execute(
-                        """UPDATE clients SET name=%s, phone=%s, work=%s, work_date=%s,
-                           mileage=%s, report_id=%s, updated_at=NOW() WHERE id=%s""",
-                        (c['name'], c['phone'], c['work'], c['work_date'],
-                         c['mileage'], report_id, existing_map[key])
-                    )
-                    updated += 1
+                novin_id = novin_by_phone.get(c['phone']) or novin_by_name.get(normalize_name(c['name']))
+                if novin_id:
+                    to_update_novin.append((c['vin'], c['work'], c['work_date'], c['mileage'], c['order_number'], report_id, novin_id))
                 else:
-                    # Проверяем: есть ли NO_VIN-запись для этого клиента?
-                    novin_id = novin_by_phone.get(c['phone']) or novin_by_name.get(normalize_name(c['name']))
-                    if novin_id:
-                        # Превращаем заглушку в полноценную запись
-                        cur.execute(
-                            """UPDATE clients SET vin=%s, work=%s, work_date=%s, mileage=%s,
-                               order_number=%s, report_id=%s, updated_at=NOW()
-                               WHERE id=%s""",
-                            (c['vin'], c['work'], c['work_date'], c['mileage'],
-                             c['order_number'], report_id, novin_id)
-                        )
-                        updated += 1
-                    else:
-                        to_insert.append((
-                            c['name'], c['phone'], c['vin'], c['work'],
-                            c['work_date'], c['mileage'], c['order_number'], report_id
-                        ))
-                        added += 1
+                    to_upsert.append((c['name'], c['phone'], c['vin'], c['work'], c['work_date'], c['mileage'], c['order_number'], report_id))
 
-            if to_insert:
+            if to_update_novin:
+                psycopg2.extras.execute_values(
+                    cur,
+                    """UPDATE clients SET vin=v.vin, work=v.work, work_date=v.work_date,
+                       mileage=v.mileage, order_number=v.order_number,
+                       report_id=v.report_id, updated_at=NOW()
+                       FROM (VALUES %s) AS v(vin, work, work_date, mileage, order_number, report_id, id)
+                       WHERE clients.id = v.id""",
+                    to_update_novin,
+                    template="(%s, %s, %s::date, %s, %s, %s, %s)"
+                )
+
+            added = 0
+            updated = 0
+            if to_upsert:
                 psycopg2.extras.execute_values(
                     cur,
                     """INSERT INTO clients (name, phone, vin, work, work_date, mileage, order_number, report_id, status)
-                       VALUES %s""",
-                    [r + ('pending',) for r in to_insert]
+                       VALUES %s
+                       ON CONFLICT (vin, order_number) DO UPDATE SET
+                           name = EXCLUDED.name,
+                           phone = EXCLUDED.phone,
+                           work = EXCLUDED.work,
+                           work_date = EXCLUDED.work_date,
+                           mileage = EXCLUDED.mileage,
+                           report_id = EXCLUDED.report_id,
+                           updated_at = NOW()""",
+                    [r + ('pending',) for r in to_upsert]
                 )
+                added = len(to_upsert)
+                updated = len(to_update_novin)
 
             conn.commit()
             conn.close()

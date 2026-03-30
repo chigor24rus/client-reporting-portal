@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_vin_order ON clients (vin, order_number);
