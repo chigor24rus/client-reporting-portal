@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ClientCard, WorkItem } from '@/context/AppContext';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
@@ -149,6 +149,28 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
     : null;
 
   const firstWorkId = card.works[0]?.id;
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Heartbeat: продлеваем блокировку каждые 60 сек пока карточка открыта
+  useEffect(() => {
+    if (expanded && firstWorkId) {
+      heartbeatRef.current = setInterval(() => {
+        lockClient(firstWorkId);
+      }, 60_000);
+    }
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [expanded, firstWorkId, lockClient]);
+
+  // Снимаем блокировку при размонтировании (закрытие вкладки / переход по страницам)
+  useEffect(() => {
+    return () => {
+      if (expanded && firstWorkId) {
+        unlockClient(firstWorkId);
+      }
+    };
+  }, []);
 
   async function handleToggle() {
     if (isLockedByOther || !firstWorkId) return;

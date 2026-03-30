@@ -66,7 +66,16 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
+    LOCK_TIMEOUT_MINUTES = 2
+
     try:
+        # Сбрасываем устаревшие блокировки (старше LOCK_TIMEOUT_MINUTES минут)
+        cur.execute(
+            "UPDATE clients SET locked_by = NULL, locked_at = NULL WHERE locked_at < NOW() - INTERVAL '%s minutes'",
+            (LOCK_TIMEOUT_MINUTES,)
+        )
+        conn.commit()
+
         # ─── GET ────────────────────────────────────────────────────────────
         if method == 'GET':
             user_id = qs.get('user_id')
