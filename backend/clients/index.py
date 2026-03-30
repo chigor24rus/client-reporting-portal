@@ -416,7 +416,9 @@ def handler(event: dict, context) -> dict:
                 fields.append("is_excluded = %s")
                 values.append(r_val in ('3', '4', '8'))
                 # Фиксируем мастера, который сохранил результат
-                fields.append("master_id = locked_by")
+                if body.get('user_id'):
+                    fields.append("master_id = %s")
+                    values.append(body['user_id'])
 
             if 'result_note' in body:
                 fields.append("result_note = %s")

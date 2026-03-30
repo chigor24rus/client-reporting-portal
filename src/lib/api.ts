@@ -105,6 +105,7 @@ export async function apiUpdateClient(id: string, payload: {
   result?: string;
   result_note?: string;
   callback_date?: string;
+  user_id?: string;
 }) {
   return request('clients', `/?id=${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }

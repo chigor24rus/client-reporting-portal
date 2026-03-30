@@ -240,6 +240,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       result,
       result_note: note,
       callback_date: callbackDate || undefined,
+      user_id: user?.id,
     });
     if (status === 200) {
       setClients(prev => prev.map(c => c.id === id ? {
