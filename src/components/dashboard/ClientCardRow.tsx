@@ -7,14 +7,14 @@ import { formatBirthDate } from './ClientBirthdayRow';
 
 type SyncFn = (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
 
-function getWorkResults(workType: string) {
+function getWorkResults(workType: string, totalActiveWorks: number) {
   const thisWorkValue = WORK_RESULT_MAP[workType];
   const allWorkValues = new Set(Object.values(WORK_RESULT_MAP));
   return CALL_RESULTS.filter(r => {
     if (r.group === 'birthday') return false;
     if (r.group === 'work' && allWorkValues.has(r.value)) {
-      // Показываем только "Записан: эта работа", остальные "Записан: ..." скрываем
-      return r.value === '1' || r.value === thisWorkValue;
+      if (r.value === '1') return totalActiveWorks > 1;
+      return r.value === thisWorkValue;
     }
     return true;
   });
@@ -23,10 +23,12 @@ function getWorkResults(workType: string) {
 function WorkRow({
   work,
   onSync,
+  totalActiveWorks,
 }: {
   work: WorkItem;
   isBirthday?: boolean;
   onSync: SyncFn;
+  totalActiveWorks: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [result, setResult] = useState(work.result || '');
@@ -100,7 +102,7 @@ function WorkRow({
               className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">— Выберите результат —</option>
-              {getWorkResults(work.work).map(r => (
+              {getWorkResults(work.work, totalActiveWorks).map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
@@ -267,7 +269,7 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
       {expanded && (
         <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border animate-fade-in space-y-2">
           {card.works.map(w => (
-            <WorkRow key={w.id} work={w} isBirthday={card.isBirthday} onSync={onSync} />
+            <WorkRow key={w.id} work={w} isBirthday={card.isBirthday} onSync={onSync} totalActiveWorks={activeWorks.length} />
           ))}
         </div>
       )}
