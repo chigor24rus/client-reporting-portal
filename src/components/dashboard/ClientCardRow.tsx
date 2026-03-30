@@ -122,12 +122,17 @@ function WorkRow({
             />
           )}
           {needsCallback && (
-            <input
-              type="date"
-              value={callbackDate}
-              onChange={e => setCallbackDate(e.target.value)}
-              className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                {isPartialBooking ? 'Дата созвона для выполнения оставшихся работ' : 'Дата повторного созвона'}
+              </label>
+              <input
+                type="date"
+                value={callbackDate}
+                onChange={e => setCallbackDate(e.target.value)}
+                className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
           )}
           <div className="flex justify-end gap-2">
             <button onClick={() => setExpanded(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">Отмена</button>
