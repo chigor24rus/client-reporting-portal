@@ -8,11 +8,52 @@ type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
 const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7'];
 const EXCLUDE_RESULTS = ['3', '4'];
+const UPCOMING_MONTHS = 3;
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending: { label: 'В обработке', color: 'text-warning' },
-  done: { label: 'Обработан', color: 'text-success' },
-};
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function getClientVisibility(workDate: string, work: string, status: string, isExcluded: boolean) {
+  const interval = WORK_INTERVALS[work];
+  if (!interval) return { label: 'Неизвестно', color: 'text-muted-foreground', icon: 'HelpCircle', detail: '' };
+
+  if (isExcluded) return { label: 'Архив', color: 'text-muted-foreground', icon: 'Archive', detail: 'Исключён из обработки' };
+  if (status === 'done') return { label: 'Обработан', color: 'text-success', icon: 'CheckCircle2', detail: '' };
+
+  const today = new Date();
+  const lastWork = new Date(workDate);
+  const diffMonths = (today.getFullYear() - lastWork.getFullYear()) * 12 + (today.getMonth() - lastWork.getMonth());
+  const upcomingMin = Math.max(0, interval.min - UPCOMING_MONTHS);
+
+  if (diffMonths >= upcomingMin && diffMonths < interval.max) {
+    return {
+      label: 'У мастеров',
+      color: 'text-success',
+      icon: 'UserCheck',
+      detail: 'Сейчас в очереди у мастеров-консультантов',
+    };
+  }
+
+  if (diffMonths < upcomingMin) {
+    const showDate = addMonths(lastWork, upcomingMin);
+    return {
+      label: 'Ещё рано',
+      color: 'text-info',
+      icon: 'CalendarClock',
+      detail: `Появится у мастеров с ${showDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+    };
+  }
+
+  return {
+    label: 'Просрочен',
+    color: 'text-destructive',
+    icon: 'AlertTriangle',
+    detail: 'Окно обслуживания истекло, клиент не попадёт в список',
+  };
+}
 
 export default function ReportsPage() {
   const { clients, apiUsers } = useApp();
@@ -149,7 +190,7 @@ export default function ReportsPage() {
           <div className="bg-card border border-border rounded-xl p-4 text-sm text-muted-foreground flex items-start gap-2">
             <Icon name="Search" size={14} className="text-primary mt-0.5 flex-shrink-0" />
             <span>
-              Поиск по всей базе — по <b className="text-foreground">Ф.И.О.</b> или <b className="text-foreground">VIN-номеру</b>. Показывает статус клиента: в обработке, обработан или просто в базе.
+              Поиск по всей базе — по <b className="text-foreground">Ф.И.О.</b> или <b className="text-foreground">VIN-номеру</b>. Показывает все записи клиента, дату работы и когда он появится в очереди у мастеров.
             </span>
           </div>
 
@@ -193,17 +234,15 @@ export default function ReportsPage() {
                     <th>Телефон</th>
                     <th>VIN</th>
                     <th>Работа</th>
+                    <th>Дата работы</th>
                     <th>Мастер</th>
-                    <th>Статус</th>
+                    <th>Видимость</th>
                     <th>Результат</th>
                   </tr>
                 </thead>
                 <tbody>
                   {searchResults.map(c => {
-                    const statusInfo = STATUS_LABELS[c.status] || { label: c.status, color: 'text-muted-foreground' };
-                    const inProgress = c.status === 'pending' && !c.isExcluded;
-                    const isDone = c.status === 'done';
-                    const isArchived = c.isExcluded;
+                    const vis = getClientVisibility(c.workDate, c.work, c.status, c.isExcluded);
                     return (
                       <tr key={c.id}>
                         <td className="text-foreground font-medium">{c.name}</td>
@@ -214,26 +253,20 @@ export default function ReportsPage() {
                             {getWorkLabel(c.work)}
                           </span>
                         </td>
+                        <td className="text-xs text-muted-foreground font-mono">
+                          {c.workDate ? new Date(c.workDate).toLocaleDateString('ru-RU') : '—'}
+                        </td>
                         <td className="text-sm">{getMasterName(c.masterId)}</td>
                         <td>
-                          {isArchived ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <Icon name="Archive" size={12} />
-                              Архив
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${vis.color}`}>
+                              <Icon name={vis.icon} size={12} fallback="Circle" />
+                              {vis.label}
                             </span>
-                          ) : isDone ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-success">
-                              <Icon name="CheckCircle2" size={12} />
-                              Обработан
-                            </span>
-                          ) : inProgress ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-warning">
-                              <Icon name="Clock" size={12} />
-                              В обработке
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{statusInfo.label}</span>
-                          )}
+                            {vis.detail && (
+                              <span className="text-xs text-muted-foreground">{vis.detail}</span>
+                            )}
+                          </div>
                         </td>
                         <td className="text-xs text-muted-foreground">{getResultLabel(c.result)}</td>
                       </tr>
