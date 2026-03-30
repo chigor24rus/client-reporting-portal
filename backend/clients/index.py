@@ -82,6 +82,18 @@ def handler(event: dict, context) -> dict:
             include_all = qs.get('include_all', 'false') == 'true'
             search_query = qs.get('search', '').strip()
 
+            # Определяем: текущий пользователь тестовый?
+            caller_is_test = False
+            if user_id:
+                cur.execute("SELECT is_test FROM users WHERE id = %s", (user_id,))
+                u_row = cur.fetchone()
+                if u_row:
+                    caller_is_test = bool(u_row['is_test'])
+            # Админы (include_all) и тестовые мастера видят тестовые записи
+            hide_test = not (include_all or caller_is_test)
+            test_filter = "AND c.is_test = FALSE" if hide_test else ""
+            test_filter_no_alias = "AND is_test = FALSE" if hide_test else ""
+
             # ─── Статистика мастеров (для виджета на дашборде) ──────────────
             if qs.get('masters_stats') == 'true':
                 cur.execute("""
@@ -122,7 +134,7 @@ def handler(event: dict, context) -> dict:
                     LEFT JOIN users u ON u.id = c.locked_by
                     WHERE c.is_excluded = FALSE
                       AND c.vin != 'NO_VIN'
-                      AND c.is_test = FALSE
+                      {test_filter}
                       AND (
                           LOWER(c.name) LIKE %s
                           OR LOWER(c.phone) LIKE %s
@@ -258,7 +270,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE AND is_test = FALSE AND ({work_filter_no_alias})
+                    WHERE is_excluded = FALSE {test_filter_no_alias} AND ({work_filter_no_alias})
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -271,7 +283,7 @@ def handler(event: dict, context) -> dict:
                 JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
-                  AND c.is_test = FALSE
+                  {test_filter}
                   AND c.status != 'done'
                   AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
                   AND ({work_filter})
@@ -284,11 +296,11 @@ def handler(event: dict, context) -> dict:
             birthday_from = today - timedelta(days=BIRTHDAY_DAYS)
             birthday_to = today + timedelta(days=BIRTHDAY_DAYS)
 
-            cur.execute("""
+            cur.execute(f"""
                 SELECT DISTINCT ON (phone) id, name, phone, birth_date, total_spent, status, result, result_note, callback_date
                 FROM clients
                 WHERE is_excluded = FALSE
-                  AND is_test = FALSE
+                  {test_filter_no_alias}
                   AND birth_date IS NOT NULL
                   AND total_spent > %s
                   AND (
@@ -308,7 +320,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE AND is_test = FALSE AND ({work_filter_no_alias})
+                    WHERE is_excluded = FALSE {test_filter_no_alias} AND ({work_filter_no_alias})
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -321,7 +333,7 @@ def handler(event: dict, context) -> dict:
                 JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
-                  AND c.is_test = FALSE
+                  {test_filter}
                   AND c.status != 'done'
                   AND c.result = '5'
                   AND c.callback_date > CURRENT_DATE
