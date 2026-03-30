@@ -195,6 +195,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, refreshClients, refreshUsers]);
 
+  // Тихий поллинг блокировок каждые 10 сек для мастеров
+  useEffect(() => {
+    if (!user || user.role !== 'master') return;
+    const interval = setInterval(async () => {
+      const params = user.id ? { user_id: user.id } : undefined;
+      const { status, data } = await apiGetClients(params);
+      if (status === 200) {
+        const raw = (data as { clients: Record<string, unknown>[] }).clients;
+        if (raw.length > 0) {
+          setClientCards(prev => prev.map(card => {
+            const fresh = (raw as unknown as ClientCard[]).find(r => r.phone === card.phone);
+            if (!fresh) return card;
+            return { ...card, lockedBy: fresh.lockedBy, lockedAt: fresh.lockedAt };
+          }));
+        }
+      }
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const updateClient = useCallback((id: string, updates: Partial<Client>) => {
     setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   }, []);
