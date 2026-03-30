@@ -74,7 +74,7 @@ type AppContextType = {
   syncClientResult: (id: string, result: string, note: string, callbackDate: string) => Promise<void>;
   refreshUsers: () => Promise<void>;
   createUser: (payload: { name: string; phone: string; password: string; role: string }) => Promise<string | null>;
-  updateUserPassword: (id: string, password: string) => Promise<void>;
+  updateUserPassword: (id: string, payload: string | { phone?: string; password?: string }) => Promise<void>;
   removeUser: (id: string) => Promise<void>;
   toggleUserActive: (id: string, active: boolean) => Promise<void>;
   refreshClients: () => Promise<void>;
@@ -265,8 +265,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return (data as { error: string }).error || 'Ошибка создания';
   }, [refreshUsers]);
 
-  const updateUserPassword = useCallback(async (id: string, password: string) => {
-    await apiUpdateUser(id, { password });
+  const updateUserPassword = useCallback(async (id: string, payload: string | { phone?: string; password?: string }) => {
+    const data = typeof payload === 'string' ? { password: payload } : payload;
+    await apiUpdateUser(id, data);
     await refreshUsers();
   }, [refreshUsers]);
 

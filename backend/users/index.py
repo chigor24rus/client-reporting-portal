@@ -133,6 +133,9 @@ def handler(event: dict, context) -> dict:
                 pwd_hash = hash_password(body['password'])
                 cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (pwd_hash, user_id))
 
+            if 'phone' in body and body['phone']:
+                cur.execute("UPDATE users SET phone = %s WHERE id = %s", (body['phone'].strip(), user_id))
+
             if 'active' in body:
                 cur.execute("UPDATE users SET active = %s WHERE id = %s", (body['active'], user_id))
                 if body.get('role') == 'master' or True:

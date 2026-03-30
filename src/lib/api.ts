@@ -71,7 +71,7 @@ export async function apiCreateUser(payload: {
   return request('users', '/', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function apiUpdateUser(id: string, payload: { password?: string; active?: boolean }) {
+export async function apiUpdateUser(id: string, payload: { password?: string; active?: boolean; phone?: string }) {
   return request('users', `/?id=${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 

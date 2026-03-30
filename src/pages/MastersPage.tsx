@@ -4,10 +4,14 @@ import Icon from '@/components/ui/icon';
 import type { ApiUser } from '@/context/AppContext';
 
 export default function MastersPage() {
-  const { apiUsers, loadingUsers, refreshUsers, clients, createUser, removeUser, toggleUserActive } = useApp();
+  const { apiUsers, loadingUsers, refreshUsers, clients, createUser, removeUser, toggleUserActive, updateUserPassword } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', password: '' });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editMaster, setEditMaster] = useState<ApiUser | null>(null);
+  const [editForm, setEditForm] = useState({ phone: '', password: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -33,6 +37,30 @@ export default function MastersPage() {
     setSuccess('Мастер успешно добавлен');
     setForm({ name: '', phone: '', password: '' });
     setShowForm(false);
+    setTimeout(() => setSuccess(''), 3000);
+  }
+
+  function openEdit(master: ApiUser) {
+    setEditMaster(master);
+    setEditForm({ phone: master.phone, password: '' });
+    setEditError('');
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editMaster) return;
+    setEditError('');
+    if (editForm.password && editForm.password.length < 4) return setEditError('Пароль не менее 4 символов');
+    setEditSaving(true);
+    const payload: { phone?: string; password?: string } = {};
+    if (editForm.phone.trim() && editForm.phone.trim() !== editMaster.phone) payload.phone = editForm.phone.trim();
+    if (editForm.password) payload.password = editForm.password;
+    if (Object.keys(payload).length === 0) { setEditMaster(null); setEditSaving(false); return; }
+    await updateUserPassword(editMaster.id, payload as Parameters<typeof updateUserPassword>[1]);
+    await refreshUsers();
+    setEditSaving(false);
+    setEditMaster(null);
+    setSuccess('Данные мастера обновлены');
     setTimeout(() => setSuccess(''), 3000);
   }
 
@@ -149,6 +177,13 @@ export default function MastersPage() {
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
+                    onClick={() => openEdit(master)}
+                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-primary hover:border-primary/50 transition-all"
+                    title="Редактировать"
+                  >
+                    <Icon name="Pencil" size={15} />
+                  </button>
+                  <button
                     onClick={() => toggleUserActive(master.id, !master.active)}
                     className={`p-2 rounded-lg border transition-all ${master.active ? 'border-border text-muted-foreground hover:text-warning hover:border-warning/50' : 'border-success/30 text-success hover:bg-success/10'}`}
                     title={master.active ? 'Отключить' : 'Включить'}
@@ -184,6 +219,55 @@ export default function MastersPage() {
           </div>
         )}
       </div>
+
+      {editMaster && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditMaster(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm font-bold text-foreground">Редактировать мастера</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{editMaster.name}</p>
+              </div>
+              <button onClick={() => setEditMaster(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <Icon name="X" size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Номер телефона (логин)</label>
+                <input
+                  value={editForm.phone}
+                  onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="+7 (9XX) XXX-XX-XX"
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Новый пароль <span className="normal-case font-normal">(оставьте пустым, если не меняете)</span></label>
+                <input
+                  type="password"
+                  value={editForm.password}
+                  onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
+                  placeholder="Мин. 4 символа"
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              {editError && (
+                <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                  <Icon name="AlertCircle" size={14} />{editError}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setEditMaster(null)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">Отмена</button>
+                <button type="submit" disabled={editSaving} className="px-4 py-2 text-sm bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-2">
+                  {editSaving && <Icon name="Loader2" size={14} className="animate-spin" />}
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
