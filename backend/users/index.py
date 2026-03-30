@@ -49,14 +49,14 @@ def handler(event: dict, context) -> dict:
             role_filter = (event.get('queryStringParameters') or {}).get('role')
             if role_filter:
                 cur.execute(
-                    "SELECT u.id, u.name, u.phone, u.role, u.active, u.created_at, m.id as master_id "
+                    "SELECT u.id, u.name, u.phone, u.role, u.active, u.created_at, u.is_test, m.id as master_id "
                     "FROM users u LEFT JOIN masters m ON m.user_id = u.id "
                     "WHERE u.role = %s ORDER BY u.created_at",
                     (role_filter,)
                 )
             else:
                 cur.execute(
-                    "SELECT u.id, u.name, u.phone, u.role, u.active, u.created_at, m.id as master_id "
+                    "SELECT u.id, u.name, u.phone, u.role, u.active, u.created_at, u.is_test, m.id as master_id "
                     "FROM users u LEFT JOIN masters m ON m.user_id = u.id "
                     "ORDER BY u.role, u.created_at"
                 )
@@ -71,6 +71,7 @@ def handler(event: dict, context) -> dict:
                     'active': r['active'],
                     'createdAt': r['created_at'].strftime('%Y-%m-%d') if r['created_at'] else None,
                     'masterId': str(r['master_id']) if r['master_id'] else None,
+                    'isTest': bool(r['is_test']),
                 })
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'users': users}, ensure_ascii=False)}
 

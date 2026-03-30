@@ -56,6 +56,7 @@ export type ApiUser = {
   active: boolean;
   createdAt: string | null;
   masterId: string | null;
+  isTest?: boolean;
 };
 
 type AppContextType = {

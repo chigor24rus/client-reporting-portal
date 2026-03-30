@@ -46,7 +46,7 @@ export default function StatisticsPage() {
       done: all.filter(c => c.work === work && c.status === 'done').length,
     }));
 
-    const masters = apiUsers.filter(u => u.role === 'master' && u.active);
+    const masters = apiUsers.filter(u => u.role === 'master' && u.active && !u.isTest);
     const byMaster = masters.map(m => {
       const mc = all.filter(c => c.masterId === m.masterId);
       const md = mc.filter(c => c.result !== null).length;
@@ -57,7 +57,7 @@ export default function StatisticsPage() {
         pending: mc.filter(c => c.result === null).length,
         rate: mc.length ? Math.round((md / mc.length) * 100) : 0,
       };
-    });
+    }).sort((a, b) => b.rate - a.rate || b.done - a.done);
 
     const today = new Date();
     const birthdays = clients.filter(c => {
@@ -182,7 +182,10 @@ export default function StatisticsPage() {
             <tbody>
               {summary.byMaster.map((m, i) => (
                 <tr key={i}>
-                  <td className="text-foreground font-medium">{m.name}</td>
+                  <td className="text-foreground font-medium">
+                    <span className="mr-1.5">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+                    {m.name}
+                  </td>
                   <td className="text-center text-foreground">{m.total}</td>
                   <td className="text-center text-success font-semibold">{m.done}</td>
                   <td className="text-center text-warning">{m.pending}</td>
