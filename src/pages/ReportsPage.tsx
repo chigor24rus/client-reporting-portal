@@ -6,6 +6,7 @@ import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
+// 2_* попадают в повторную обработку только если статус pending (частичная запись с датой созвона)
 const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7', '9'];
 const EXCLUDE_RESULTS = ['3', '4'];
 const UPCOMING_MONTHS = 3;
@@ -63,7 +64,13 @@ export default function ReportsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const followup = useMemo(() =>
-    clients.filter(c => !c.isExcluded && c.result && FOLLOWUP_RESULTS.includes(c.result)),
+    clients.filter(c => {
+      if (c.isExcluded || !c.result) return false;
+      if (!FOLLOWUP_RESULTS.includes(c.result)) return false;
+      // 2_* только если pending (частичная запись с датой созвона)
+      if (c.result.startsWith('2_')) return c.status === 'pending';
+      return true;
+    }),
     [clients]
   );
 
