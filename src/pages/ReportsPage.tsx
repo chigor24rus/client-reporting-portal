@@ -1,21 +1,25 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 
-type ReportTab = 'followup' | 'summary' | 'excluded';
-
-import { useState } from 'react';
+type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
 const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7'];
 const EXCLUDE_RESULTS = ['3', '4'];
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  pending: { label: 'В обработке', color: 'text-warning' },
+  done: { label: 'Обработан', color: 'text-success' },
+};
 
 export default function ReportsPage() {
   const { clients, apiUsers } = useApp();
   const [tab, setTab] = useState<ReportTab>('followup');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const followup = useMemo(() =>
     clients.filter(c => !c.isExcluded && c.result && FOLLOWUP_RESULTS.includes(c.result)),
@@ -32,7 +36,17 @@ export default function ReportsPage() {
     [clients]
   );
 
-  function getMasterName(masterId: string) {
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || q.length < 2) return [];
+    return clients.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.vin && c.vin.toLowerCase().includes(q))
+    );
+  }, [clients, searchQuery]);
+
+  function getMasterName(masterId: string | null) {
+    if (!masterId) return '—';
     return apiUsers.find(m => m.id === masterId)?.name || 'Не назначен';
   }
 
@@ -58,6 +72,7 @@ export default function ReportsPage() {
     { id: 'followup' as ReportTab, label: 'Повторная обработка', count: followup.length, icon: 'RefreshCcw' },
     { id: 'summary' as ReportTab, label: 'Сводный отчёт', count: summary.length, icon: 'ClipboardCheck' },
     { id: 'excluded' as ReportTab, label: 'Архив', count: excluded.length, icon: 'Archive' },
+    { id: 'search' as ReportTab, label: 'Поиск клиента', count: null, icon: 'Search' },
   ];
 
   const current = tab === 'followup' ? followup : tab === 'summary' ? summary : excluded;
@@ -86,7 +101,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {tabs.map(t => (
           <button
             key={t.id}
@@ -95,9 +110,11 @@ export default function ReportsPage() {
           >
             <Icon name={t.icon} size={14} fallback="Circle" />
             {t.label}
-            <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${tab === t.id ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}>
-              {t.count}
-            </span>
+            {t.count !== null && (
+              <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${tab === t.id ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}>
+                {t.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -127,52 +144,159 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {current.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Icon name="Inbox" size={36} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm">Нет данных в этом разделе</p>
+      {tab === 'search' && (
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-xl p-4 text-sm text-muted-foreground flex items-start gap-2">
+            <Icon name="Search" size={14} className="text-primary mt-0.5 flex-shrink-0" />
+            <span>
+              Поиск по всей базе — по <b className="text-foreground">Ф.И.О.</b> или <b className="text-foreground">VIN-номеру</b>. Показывает статус клиента: в обработке, обработан или просто в базе.
+            </span>
+          </div>
+
+          <div className="relative">
+            <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Введите Ф.И.О. или VIN..."
+              className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 text-foreground placeholder:text-muted-foreground"
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <Icon name="X" size={14} />
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+            <p className="text-sm text-muted-foreground text-center py-4">Введите минимум 2 символа</p>
+          )}
+
+          {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Icon name="UserX" size={36} className="mx-auto mb-3 opacity-40" />
+              <p className="text-sm">Клиент не найден в базе данных</p>
+            </div>
+          )}
+
+          {searchResults.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th>Клиент</th>
+                    <th>Телефон</th>
+                    <th>VIN</th>
+                    <th>Работа</th>
+                    <th>Мастер</th>
+                    <th>Статус</th>
+                    <th>Результат</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchResults.map(c => {
+                    const statusInfo = STATUS_LABELS[c.status] || { label: c.status, color: 'text-muted-foreground' };
+                    const inProgress = c.status === 'pending' && !c.isExcluded;
+                    const isDone = c.status === 'done';
+                    const isArchived = c.isExcluded;
+                    return (
+                      <tr key={c.id}>
+                        <td className="text-foreground font-medium">{c.name}</td>
+                        <td className="font-mono text-xs">{c.phone}</td>
+                        <td className="font-mono text-xs">{c.vin}</td>
+                        <td>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
+                            {getWorkLabel(c.work)}
+                          </span>
+                        </td>
+                        <td className="text-sm">{getMasterName(c.masterId)}</td>
+                        <td>
+                          {isArchived ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Icon name="Archive" size={12} />
+                              Архив
+                            </span>
+                          ) : isDone ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-success">
+                              <Icon name="CheckCircle2" size={12} />
+                              Обработан
+                            </span>
+                          ) : inProgress ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-warning">
+                              <Icon name="Clock" size={12} />
+                              В обработке
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">{statusInfo.label}</span>
+                          )}
+                        </td>
+                        <td className="text-xs text-muted-foreground">{getResultLabel(c.result)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="text-xs text-muted-foreground mt-2 px-1">
+                Найдено записей: {searchResults.length}
+              </p>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full data-table">
-            <thead>
-              <tr>
-                <th>Клиент</th>
-                <th>Телефон</th>
-                <th>VIN</th>
-                <th>Работа</th>
-                <th>Мастер</th>
-                <th>Результат</th>
-                {tab === 'followup' && <th>Комментарий</th>}
-                {tab === 'summary' && <th>Дата созвона</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {current.map(c => (
-                <tr key={c.id}>
-                  <td className="text-foreground font-medium">{c.name}</td>
-                  <td className="font-mono text-xs">{c.phone}</td>
-                  <td className="font-mono text-xs">{c.vin}</td>
-                  <td>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
-                      {getWorkLabel(c.work)}
-                    </span>
-                  </td>
-                  <td className="text-sm">{getMasterName(c.masterId)}</td>
-                  <td>
-                    <span className="text-xs text-muted-foreground">{getResultLabel(c.result)}</span>
-                  </td>
-                  {tab === 'followup' && (
-                    <td className="text-xs text-muted-foreground max-w-[160px] truncate">{c.resultNote || '—'}</td>
-                  )}
-                  {tab === 'summary' && (
-                    <td className="text-xs text-muted-foreground">{c.callbackDate || '—'}</td>
-                  )}
+      )}
+
+      {tab !== 'search' && (
+        current.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Icon name="Inbox" size={36} className="mx-auto mb-3 opacity-40" />
+            <p className="text-sm">Нет данных в этом разделе</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full data-table">
+              <thead>
+                <tr>
+                  <th>Клиент</th>
+                  <th>Телефон</th>
+                  <th>VIN</th>
+                  <th>Работа</th>
+                  <th>Мастер</th>
+                  <th>Результат</th>
+                  {tab === 'followup' && <th>Комментарий</th>}
+                  {tab === 'summary' && <th>Дата созвона</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {current.map(c => (
+                  <tr key={c.id}>
+                    <td className="text-foreground font-medium">{c.name}</td>
+                    <td className="font-mono text-xs">{c.phone}</td>
+                    <td className="font-mono text-xs">{c.vin}</td>
+                    <td>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
+                        {getWorkLabel(c.work)}
+                      </span>
+                    </td>
+                    <td className="text-sm">{getMasterName(c.masterId)}</td>
+                    <td>
+                      <span className="text-xs text-muted-foreground">{getResultLabel(c.result)}</span>
+                    </td>
+                    {tab === 'followup' && (
+                      <td className="text-xs text-muted-foreground max-w-[160px] truncate">{c.resultNote || '—'}</td>
+                    )}
+                    {tab === 'summary' && (
+                      <td className="text-xs text-muted-foreground">{c.callbackDate || '—'}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
   );
