@@ -1,14 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
-import { useState } from 'react';
 
 export default function DashboardPage() {
   const { clientCards, clients, apiUsers, syncClientResult, loadingClients } = useApp();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday' | 'search'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
