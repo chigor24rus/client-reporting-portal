@@ -20,8 +20,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navItems = user?.role === 'admin' ? ADMIN_NAV : MASTER_NAV;
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <aside className="w-56 flex-shrink-0 border-r border-border bg-sidebar flex flex-col">
+    <div className="h-screen bg-background flex overflow-hidden">
+      <aside className="w-56 flex-shrink-0 border-r border-border bg-sidebar flex flex-col h-screen sticky top-0">
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <img
