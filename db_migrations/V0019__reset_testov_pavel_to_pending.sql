@@ -1,0 +1,2 @@
+UPDATE clients SET result = NULL, result_note = NULL, callback_date = NULL, status = 'pending', master_id = NULL, is_excluded = FALSE
+WHERE name = 'Тестов Павел';
