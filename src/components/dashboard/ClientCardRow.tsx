@@ -268,20 +268,18 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
 
       {expanded && (
         <div className="px-4 pb-4 pt-3 bg-secondary/10 border-t border-border animate-fade-in space-y-2">
-          {card.works.map((w, i) => {
-            const activeIndex = card.works.filter(x => x.isUpcoming !== true).indexOf(w);
-            const isFirstActive = activeIndex === 0;
+          {(() => {
             const totalActive = card.works.filter(x => x.isUpcoming !== true).length;
-            return (
+            return card.works.map(w => (
               <WorkRow
                 key={w.id}
                 work={w}
                 isBirthday={card.isBirthday}
                 onSync={onSync}
-                totalActiveWorks={isFirstActive && totalActive > 1 ? totalActive : 1}
+                totalActiveWorks={totalActive}
               />
-            );
-          })}
+            ));
+          })()}
         </div>
       )}
     </div>
