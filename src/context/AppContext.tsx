@@ -252,7 +252,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isExcluded: ['3', '4'].includes(result),
       } : c));
     }
-  }, []);
+  }, [user]);
 
   const createUser = useCallback(async (payload: {
     name: string; phone: string; password: string; role: string;
