@@ -245,8 +245,11 @@ export default function ClientCardRow({ card, onSync }: CardProps) {
         )}
       </div>
       {isLockedByOther && (
-        <div className="px-4 py-1.5 bg-orange-500/10 border-t border-orange-500/20 text-xs text-orange-400">
-          Карточка открыта другим мастером
+        <div className="px-4 py-1.5 bg-orange-500/10 border-t border-orange-500/20 text-xs text-orange-400 flex items-center gap-1.5">
+          <Icon name="Lock" size={11} />
+          Открыта: {card.lockedByName
+            ? (() => { const parts = card.lockedByName.split(' '); return parts[0] + (parts[1] ? ' ' + parts[1][0] + '.' : ''); })()
+            : 'другой мастер'}
         </div>
       )}
 

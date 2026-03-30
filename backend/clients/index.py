@@ -133,8 +133,10 @@ def handler(event: dict, context) -> dict:
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
                        c.birth_date, c.total_spent, c.locked_by, c.locked_at,
+                       u.name AS locked_by_name,
                        ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
                 FROM clients c
+                LEFT JOIN users u ON u.id = c.locked_by
                 WHERE c.is_excluded = FALSE
                   AND c.status != 'done'
                   AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
@@ -171,8 +173,10 @@ def handler(event: dict, context) -> dict:
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
                        c.birth_date, c.total_spent, c.locked_by, c.locked_at,
+                       u.name AS locked_by_name,
                        ROW_NUMBER() OVER (PARTITION BY c.phone, c.work, c.vin ORDER BY c.work_date DESC) AS rn
                 FROM clients c
+                LEFT JOIN users u ON u.id = c.locked_by
                 WHERE c.is_excluded = FALSE
                   AND c.status != 'done'
                   AND c.result = '5'
@@ -199,6 +203,7 @@ def handler(event: dict, context) -> dict:
                         'is_birthday': False,
                         'locked_by': str(r['locked_by']) if r['locked_by'] else None,
                         'locked_at': r['locked_at'].isoformat() if r['locked_at'] else None,
+                        'locked_by_name': r['locked_by_name'] if r['locked_by_name'] else None,
                     }
 
                 work = r['work']
@@ -297,6 +302,7 @@ def handler(event: dict, context) -> dict:
                 g.setdefault('callback_date', None)
                 g.setdefault('locked_by', None)
                 g.setdefault('locked_at', None)
+                g.setdefault('locked_by_name', None)
 
             # Сортируем: сначала с работами по срочности, потом только именинники
             sorted_groups = sorted(
@@ -328,6 +334,7 @@ def handler(event: dict, context) -> dict:
                     'cardCallbackDate': g['callback_date'].strftime('%Y-%m-%d') if g['callback_date'] else None,
                     'lockedBy': g['locked_by'],
                     'lockedAt': g['locked_at'],
+                    'lockedByName': g['locked_by_name'],
                 })
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}

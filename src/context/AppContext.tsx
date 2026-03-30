@@ -37,6 +37,7 @@ export type ClientCard = {
   status: 'pending' | 'done';
   lockedBy?: string | null;
   lockedAt?: string | null;
+  lockedByName?: string | null;
 };
 
 export type User = {
@@ -207,7 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setClientCards(prev => prev.map(card => {
             const fresh = (raw as unknown as ClientCard[]).find(r => r.phone === card.phone);
             if (!fresh) return card;
-            return { ...card, lockedBy: fresh.lockedBy, lockedAt: fresh.lockedAt };
+            return { ...card, lockedBy: fresh.lockedBy, lockedAt: fresh.lockedAt, lockedByName: fresh.lockedByName };
           }));
         }
       }
