@@ -240,6 +240,7 @@ def handler(event: dict, context) -> dict:
                 if phone and is_birthday_near(r['birth_date'], today):
                     if phone in groups:
                         groups[phone]['is_birthday'] = True
+                        groups[phone]['birth_date'] = r['birth_date']
                     else:
                         # Именинник без работ — добавляем отдельную карточку
                         groups[phone] = {
