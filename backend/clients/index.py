@@ -195,7 +195,7 @@ def handler(event: dict, context) -> dict:
                            COUNT(c.id) as contacted
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
-                    LEFT JOIN clients c ON c.master_id = m.id AND c.is_excluded = FALSE
+                    LEFT JOIN clients c ON c.master_id = m.id
                     WHERE u.role = 'master' AND u.active = TRUE AND u.is_test = FALSE
                     GROUP BY u.id, u.name
                     ORDER BY done DESC, total DESC
