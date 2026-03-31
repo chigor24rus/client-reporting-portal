@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount, apiGetDailyStats } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -29,13 +29,18 @@ export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
+  type MasterStat = { userId: string; name: string; total: number; done: number; contacted: number; rate: number };
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
+  const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
 
   useEffect(() => {
     apiGetPendingCount().then(({ status, data }) => {
       if (status === 200) setPendingCount((data as { pending: number }).pending);
+    });
+    apiGetMastersStats().then(({ status, data }) => {
+      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
     });
   }, []);
 
@@ -73,20 +78,7 @@ export default function StatisticsPage() {
       done: all.filter(c => c.work === work && c.status === 'done').length,
     }));
 
-    const masters = apiUsers.filter(u => u.role === 'master' && u.active && !u.isTest);
-    const byMaster = masters.map(m => {
-      const mc = all.filter(c => c.masterId === m.masterId);
-      const contacted = mc.filter(c => c.result !== null).length;
-      const booked = mc.filter(c => c.result !== null && SUCCESS_RESULTS.has(c.result)).length;
-      const callback = mc.filter(c => c.result === '5').length;
-      return {
-        name: m.name.split(' ').slice(0, 2).join(' '),
-        total: contacted,
-        booked,
-        callback,
-        rate: contacted ? Math.round((booked / contacted) * 100) : 0,
-      };
-    }).sort((a, b) => b.rate - a.rate || b.booked - a.booked);
+    const byMaster: { name: string; total: number; booked: number; callback: number; rate: number }[] = [];
 
     const today = new Date();
     const birthdays = clients.filter(c => {
@@ -101,6 +93,22 @@ export default function StatisticsPage() {
 
     return { total, done, booked, pending, excluded, byResult, byWork, byMaster, birthdays };
   }, [clients, apiUsers]);
+
+  const byMaster = useMemo(() => {
+    const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
+    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
+    return mastersStats.map(m => {
+      const mc = all.filter(c => String(c.masterId) === m.userId);
+      const callback = mc.filter(c => c.result === '5').length;
+      return {
+        name: m.name,
+        total: m.total,
+        booked: m.done,
+        callback,
+        rate: m.total ? Math.round((m.done / m.total) * 100) : 0,
+      };
+    }).sort((a, b) => b.rate - a.rate || b.booked - a.booked);
+  }, [mastersStats, clients]);
 
   const metrics = [
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
@@ -210,7 +218,7 @@ export default function StatisticsPage() {
               </tr>
             </thead>
             <tbody>
-              {summary.byMaster.map((m, i) => (
+              {byMaster.map((m, i) => (
                 <tr key={i}>
                   <td className="text-foreground font-medium">
                     <span className="mr-1.5">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
