@@ -26,11 +26,21 @@ export default function DashboardPage() {
   const [searchDone, setSearchDone] = useState(false);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
 
-  useEffect(() => {
+  const refreshMastersStats = useCallback(() => {
     apiGetMastersStats().then(({ status, data }) => {
       if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
     });
   }, []);
+
+  useEffect(() => {
+    refreshMastersStats();
+  }, [refreshMastersStats]);
+
+  const handleSync = useCallback(async (...args: Parameters<typeof syncClientResult>) => {
+    const result = await syncClientResult(...args);
+    refreshMastersStats();
+    return result;
+  }, [syncClientResult, refreshMastersStats]);
 
   const masters = apiUsers.filter(u => u.role === 'master' && u.active);
 
@@ -213,8 +223,8 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground px-1">Найдено: {searchResults.length}</p>
                 {searchResults.map((card, i) => (
                   card.isBirthday && card.works.length === 0
-                    ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
-                    : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+                    ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={handleSync} />
+                    : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={handleSync} />
                 ))}
               </div>
             )}
@@ -229,8 +239,8 @@ export default function DashboardPage() {
             )}
             {filtered.map((card, i) => (
               card.isBirthday && card.works.length === 0
-                ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
-                : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={syncClientResult} />
+                ? <ClientBirthdayRow key={`${card.phone}-${i}`} card={card} onSync={handleSync} />
+                : <ClientCardRow key={`${card.phone}-${i}`} card={card} onSync={handleSync} />
             ))}
             {!loadingClients && filtered.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
