@@ -171,7 +171,7 @@ def handler(event: dict, context) -> dict:
                     WITH latest AS (
                         SELECT phone, work, vin, MAX(work_date) AS max_work_date
                         FROM clients
-                        WHERE is_excluded = FALSE AND is_test = FALSE AND ({wf_no_alias})
+                        WHERE is_excluded = FALSE AND is_test = FALSE
                         GROUP BY phone, work, vin
                     )
                     SELECT COUNT(DISTINCT c.phone || '|' || c.work || '|' || c.vin) AS cnt
@@ -367,7 +367,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE {test_filter_no_alias} AND ({work_filter_no_alias})
+                    WHERE is_excluded = FALSE {test_filter_no_alias}
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -417,7 +417,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE {test_filter_no_alias} AND ({work_filter_no_alias})
+                    WHERE is_excluded = FALSE {test_filter_no_alias}
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
