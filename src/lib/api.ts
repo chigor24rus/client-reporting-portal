@@ -105,6 +105,10 @@ export async function apiGetPendingCount() {
   return request('clients', '/?pending_count=true');
 }
 
+export async function apiGetDailyStats() {
+  return request('clients', '/?daily_stats=true');
+}
+
 export async function apiResetClient(id: string) {
   return request('clients', `/?id=${id}&action=reset`, { method: 'POST', body: JSON.stringify({}) });
 }

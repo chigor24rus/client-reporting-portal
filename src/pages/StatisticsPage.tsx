@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -28,10 +28,15 @@ const RESULT_COLORS: Record<string, string> = {
 export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
+  const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
 
   useEffect(() => {
     apiGetPendingCount().then(({ status, data }) => {
       if (status === 200) setPendingCount((data as { pending: number }).pending);
+    });
+    apiGetDailyStats().then(({ status, data }) => {
+      if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
     });
   }, []);
 
@@ -224,6 +229,70 @@ export default function StatisticsPage() {
           </table>
         </div>
       </div>
+
+      {dailyStats.length > 0 && (() => {
+        const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => b.localeCompare(a));
+        const masters = [...new Map(dailyStats.map(s => [s.userId, s.name])).entries()].map(([userId, name]) => ({ userId, name }));
+        const map: Record<string, Record<string, { contacted: number; booked: number }>> = {};
+        dailyStats.forEach(s => {
+          if (!map[s.day]) map[s.day] = {};
+          map[s.day][s.userId] = { contacted: s.contacted, booked: s.booked };
+        });
+        const maxVal = Math.max(...dailyStats.map(s => s.contacted), 1);
+        return (
+          <div className="metric-card">
+            <p className="text-sm font-semibold text-foreground mb-4">Активность по дням (последние 30 дней)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full data-table text-xs">
+                <thead>
+                  <tr>
+                    <th className="text-left">Дата</th>
+                    {masters.map(m => (
+                      <th key={m.userId} className="text-center whitespace-nowrap">{m.name}</th>
+                    ))}
+                    <th className="text-center">Итого</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {days.map(day => {
+                    const dayTotal = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
+                    return (
+                      <tr key={day}>
+                        <td className="text-muted-foreground whitespace-nowrap">
+                          {new Date(day).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
+                        </td>
+                        {masters.map(m => {
+                          const val = map[day]?.[m.userId];
+                          const intensity = val ? Math.round((val.contacted / maxVal) * 100) : 0;
+                          return (
+                            <td key={m.userId} className="text-center p-1">
+                              {val ? (
+                                <span
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-xs font-semibold"
+                                  style={{
+                                    background: `hsla(142, 72%, 42%, ${0.15 + intensity * 0.0085})`,
+                                    color: intensity > 50 ? 'hsl(142 72% 62%)' : 'hsl(142 72% 42%)',
+                                  }}
+                                  title={`${val.contacted} обработано, ${val.booked} записано`}
+                                >
+                                  {val.contacted}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/30">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="text-center font-semibold text-foreground">{dayTotal}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

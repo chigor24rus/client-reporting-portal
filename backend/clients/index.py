@@ -94,6 +94,38 @@ def handler(event: dict, context) -> dict:
             test_filter = "AND c.is_test = FALSE" if hide_test else ""
             test_filter_no_alias = "AND is_test = FALSE" if hide_test else ""
 
+            # ─── Активность мастеров по дням ────────────────────────────────
+            if qs.get('daily_stats') == 'true':
+                cur.execute("""
+                    SELECT DATE(c.updated_at) AS day,
+                           u.id AS user_id,
+                           u.name,
+                           COUNT(*) AS contacted,
+                           COUNT(*) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) AS booked
+                    FROM clients c
+                    JOIN masters m ON m.id = c.master_id
+                    JOIN users u ON u.id = m.user_id
+                    WHERE c.result IS NOT NULL
+                      AND c.is_excluded = FALSE
+                      AND c.is_test = FALSE
+                      AND u.active = TRUE
+                      AND u.is_test = FALSE
+                      AND c.updated_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY DATE(c.updated_at), u.id, u.name
+                    ORDER BY day DESC, u.name
+                """)
+                rows = cur.fetchall()
+                result = []
+                for r in rows:
+                    result.append({
+                        'day': r['day'].strftime('%Y-%m-%d'),
+                        'userId': str(r['user_id']),
+                        'name': ' '.join(r['name'].split()[:2]),
+                        'contacted': r['contacted'],
+                        'booked': r['booked'],
+                    })
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': result}, ensure_ascii=False)}
+
             # ─── Количество актуальных ожидающих клиентов (для страницы статистики админа) ───────────────
             if qs.get('pending_count') == 'true':
                 wc_no_alias = []

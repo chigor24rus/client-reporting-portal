@@ -32,6 +32,12 @@
       "method": "GET",
       "path": "/?pending_count=true",
       "expectedStatus": 200
+    },
+    {
+      "name": "Daily stats returns array",
+      "method": "GET",
+      "path": "/?daily_stats=true",
+      "expectedStatus": 200
     }
   ]
 }
