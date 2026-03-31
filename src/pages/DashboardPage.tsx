@@ -44,8 +44,9 @@ export default function DashboardPage() {
   }, [clientCards, filter]);
 
   const pending = clientCards.filter(c => c.status !== 'done').length;
-  const done = clientCards.filter(c => c.status === 'done').length;
-  const total = clientCards.length;
+  const myStat = mastersStats.find(m => m.userId === user?.id);
+  const done = myStat?.done ?? 0;
+  const total = myStat?.total ?? clientCards.length;
 
   const masterStats = useMemo(() => {
     return masters.map(m => {
