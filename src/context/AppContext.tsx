@@ -245,6 +245,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       user_id: user?.id,
     });
     if (status === 200) {
+      // Обновляем плоский список (для админа)
       setClients(prev => prev.map(c => c.id === id ? {
         ...c,
         result,
@@ -253,6 +254,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status: 'done',
         isExcluded: ['3', '4'].includes(result),
       } : c));
+
+      // Обновляем карточки мастера без перезагрузки страницы
+      const PENDING_RESULTS = new Set(['7', '5']);
+      const newStatus = !result || PENDING_RESULTS.has(result) ? 'pending' : 'done';
+      const isDeferred = result === '5' && !!callbackDate;
+      const today = new Date().toISOString().slice(0, 10);
+
+      setClientCards(prev => {
+        return prev
+          .map(card => {
+            const hasWork = card.works.some(w => w.id === id);
+            if (!hasWork) return card;
+
+            const updatedWorks = card.works.map(w =>
+              w.id === id
+                ? { ...w, result, resultNote: note, callbackDate: callbackDate || null, status: newStatus as 'pending' | 'done' }
+                : w
+            );
+
+            // Если результат '1' — закрываем все остальные активные работы
+            const finalWorks = result === '1'
+              ? updatedWorks.map(w => w.id === id ? w : (!w.isUpcoming && w.status === 'pending' ? { ...w, result: '1', status: 'done' as const } : w))
+              : updatedWorks;
+
+            const activeWorks = finalWorks.filter(w => !w.isUpcoming);
+            const cardStatus = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done') ? 'done' : 'pending';
+
+            return { ...card, works: finalWorks, status: cardStatus };
+          })
+          // Убираем из списка клиентов у которых все активные работы закрыты
+          // и они не отложены (result=5 с будущей датой)
+          .filter(card => {
+            const activeWorks = card.works.filter(w => !w.isUpcoming);
+            const allDone = activeWorks.length > 0 && activeWorks.every(w => w.status === 'done');
+            if (!allDone) return true;
+            // Оставляем отложенных с будущей датой созвона
+            const hasDeferred = activeWorks.some(w => w.result === '5' && w.callbackDate && w.callbackDate > today);
+            return hasDeferred;
+          });
+      });
     }
   }, [user]);
 
