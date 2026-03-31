@@ -278,7 +278,6 @@ export default function StatisticsPage() {
                       {masters.map(m => (
                         <th key={m.userId} className="text-center whitespace-nowrap" colSpan={2}>{m.name}</th>
                       ))}
-                      <th className="text-center" colSpan={2}>Итого</th>
                     </tr>
                     <tr>
                       <th></th>
@@ -288,33 +287,25 @@ export default function StatisticsPage() {
                           <th key={m.userId + '_b'} className="text-center text-muted-foreground font-normal">Записано</th>
                         </>
                       ))}
-                      <th className="text-center text-muted-foreground font-normal">Обраб.</th>
-                      <th className="text-center text-muted-foreground font-normal">Записано</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {days.map(day => {
-                      const dayContacted = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
-                      const dayBooked = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.booked ?? 0), 0);
-                      return (
-                        <tr key={day}>
-                          <td className="text-muted-foreground whitespace-nowrap">
-                            {new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
-                          </td>
-                          {masters.map(m => {
-                            const val = map[day]?.[m.userId];
-                            return (
-                              <>
-                                <td key={m.userId + '_c'} className="text-center text-foreground">{val ? val.contacted : <span className="text-muted-foreground/30">—</span>}</td>
-                                <td key={m.userId + '_b'} className="text-center text-success font-semibold">{val ? val.booked : <span className="text-muted-foreground/30">—</span>}</td>
-                              </>
-                            );
-                          })}
-                          <td className="text-center font-semibold text-foreground">{dayContacted || <span className="text-muted-foreground/30">—</span>}</td>
-                          <td className="text-center font-semibold text-success">{dayBooked || <span className="text-muted-foreground/30">—</span>}</td>
-                        </tr>
-                      );
-                    })}
+                    {days.map(day => (
+                      <tr key={day}>
+                        <td className="text-muted-foreground whitespace-nowrap">
+                          {new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
+                        </td>
+                        {masters.map(m => {
+                          const val = map[day]?.[m.userId];
+                          return (
+                            <>
+                              <td key={m.userId + '_c'} className="text-center text-foreground">{val ? val.contacted : <span className="text-muted-foreground/30">—</span>}</td>
+                              <td key={m.userId + '_b'} className="text-center text-success font-semibold">{val ? val.booked : <span className="text-muted-foreground/30">—</span>}</td>
+                            </>
+                          );
+                        })}
+                      </tr>
+                    ))}
                     <tr className="border-t border-border">
                       <td className="font-semibold text-foreground">Итого</td>
                       {masters.map(m => {
@@ -327,8 +318,6 @@ export default function StatisticsPage() {
                           </>
                         );
                       })}
-                      <td className="text-center font-bold text-primary">{monthTotal}</td>
-                      <td className="text-center font-bold text-success">{dailyStats.reduce((s, x) => s + x.booked, 0)}</td>
                     </tr>
                   </tbody>
                 </table>
