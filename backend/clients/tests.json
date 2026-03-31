@@ -26,6 +26,12 @@
       "path": "/?id=999&action=foo",
       "body": {"user_id": "1"},
       "expectedStatus": 400
+    },
+    {
+      "name": "Pending count returns number",
+      "method": "GET",
+      "path": "/?pending_count=true",
+      "expectedStatus": 200
     }
   ]
 }

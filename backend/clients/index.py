@@ -94,6 +94,47 @@ def handler(event: dict, context) -> dict:
             test_filter = "AND c.is_test = FALSE" if hide_test else ""
             test_filter_no_alias = "AND is_test = FALSE" if hide_test else ""
 
+            # ─── Количество актуальных ожидающих клиентов (для страницы статистики админа) ───────────────
+            if qs.get('pending_count') == 'true':
+                wc_no_alias = []
+                for work, (min_m, max_m) in WORK_INTERVALS.items():
+                    w = work.replace("'", "''")
+                    upcoming_min = max(0, min_m - UPCOMING_MONTHS)
+                    wc_no_alias.append(f"""
+                        (work = '{w}'
+                         AND work_date < NOW() - INTERVAL '{upcoming_min} months'
+                         AND work_date >= NOW() - INTERVAL '{max_m} months')
+                    """)
+                wf_no_alias = " OR ".join(wc_no_alias)
+                wc_alias = []
+                for work, (min_m, max_m) in WORK_INTERVALS.items():
+                    w = work.replace("'", "''")
+                    upcoming_min = max(0, min_m - UPCOMING_MONTHS)
+                    wc_alias.append(f"""
+                        (c.work = '{w}'
+                         AND c.work_date < NOW() - INTERVAL '{upcoming_min} months'
+                         AND c.work_date >= NOW() - INTERVAL '{max_m} months')
+                    """)
+                wf_alias = " OR ".join(wc_alias)
+                cur.execute(f"""
+                    WITH latest AS (
+                        SELECT phone, work, vin, MAX(work_date) AS max_work_date
+                        FROM clients
+                        WHERE is_excluded = FALSE AND is_test = FALSE AND ({wf_no_alias})
+                        GROUP BY phone, work, vin
+                    )
+                    SELECT COUNT(DISTINCT c.phone || '|' || c.work || '|' || c.vin) AS cnt
+                    FROM clients c
+                    JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
+                                      AND c.work_date = l.max_work_date
+                    WHERE c.is_excluded = FALSE AND c.is_test = FALSE
+                      AND c.status != 'done'
+                      AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
+                      AND ({wf_alias})
+                """)
+                row = cur.fetchone()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'pending': int(row['cnt'] or 0)}, ensure_ascii=False)}
+
             # ─── Статистика мастеров (для виджета на дашборде) ──────────────
             if qs.get('masters_stats') == 'true':
                 cur.execute("""

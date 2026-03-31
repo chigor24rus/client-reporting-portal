@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
+import { apiGetPendingCount } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -26,6 +27,13 @@ const RESULT_COLORS: Record<string, string> = {
 
 export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    apiGetPendingCount().then(({ status, data }) => {
+      if (status === 200) setPendingCount((data as { pending: number }).pending);
+    });
+  }, []);
 
   const summary = useMemo(() => {
     const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
@@ -79,7 +87,7 @@ export default function StatisticsPage() {
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
     { label: 'Обработано', value: summary.done, icon: 'PhoneCall', color: 'text-primary', bg: 'bg-primary/10' },
     { label: 'Записаны', value: summary.booked, icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
-    { label: 'Ожидают', value: summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
+    { label: 'Ожидают', value: pendingCount ?? summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
     { label: 'В архиве', value: summary.excluded, icon: 'Archive', color: 'text-muted-foreground', bg: 'bg-secondary' },
     { label: 'Именинники', value: summary.birthdays, icon: 'Cake', color: 'text-pink-400', bg: 'bg-pink-500/10' },
   ];
