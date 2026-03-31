@@ -48,9 +48,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
   const teamTotal = mastersStats.reduce((s, m) => s + m.total, 0);
   const teamDone = mastersStats.reduce((s, m) => s + m.done, 0);
 
-  const successStats = personalMonthStats.filter(s => SUCCESS_RESULTS.has(s.result));
-  const otherStats = personalMonthStats.filter(s => !SUCCESS_RESULTS.has(s.result));
-  const successCount = successStats.reduce((s, x) => s + x.count, 0);
+  const successCount = personalMonthStats.filter(s => SUCCESS_RESULTS.has(s.result)).reduce((s, x) => s + x.count, 0);
   const totalProcessed = personalMonthStats.reduce((s, x) => s + x.count, 0);
 
   return (
@@ -163,20 +161,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
                     <p className="text-xs text-muted-foreground">Конверсия</p>
                   </div>
                 </div>
-                {otherStats.length > 0 && (
-                  <div className="pt-2 space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Прочие результаты</p>
-                    {otherStats.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                          <span className="text-muted-foreground truncate max-w-[150px]">{s.label}</span>
-                        </div>
-                        <span className="font-semibold text-foreground ml-2">{s.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
               </div>
             ) : (
               <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет обработанных клиентов</div>
