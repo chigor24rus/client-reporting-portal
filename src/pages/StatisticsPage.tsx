@@ -28,9 +28,11 @@ export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
 
   const summary = useMemo(() => {
+    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
     const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
     const total = all.length;
     const done = all.filter(c => c.result !== null).length;
+    const booked = all.filter(c => c.result !== null && SUCCESS_RESULTS.has(c.result)).length;
     const pending = all.filter(c => c.result === null).length;
     const excluded = clients.filter(c => c.isExcluded).length;
 
@@ -70,12 +72,13 @@ export default function StatisticsPage() {
       return diff <= 7;
     }).length;
 
-    return { total, done, pending, excluded, byResult, byWork, byMaster, birthdays };
+    return { total, done, booked, pending, excluded, byResult, byWork, byMaster, birthdays };
   }, [clients, apiUsers]);
 
   const metrics = [
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
-    { label: 'Обработано', value: summary.done, icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
+    { label: 'Обработано', value: summary.done, icon: 'PhoneCall', color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Записаны', value: summary.booked, icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
     { label: 'Ожидают', value: summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
     { label: 'В архиве', value: summary.excluded, icon: 'Archive', color: 'text-muted-foreground', bg: 'bg-secondary' },
     { label: 'Именинники', value: summary.birthdays, icon: 'Cake', color: 'text-pink-400', bg: 'bg-pink-500/10' },
@@ -88,7 +91,7 @@ export default function StatisticsPage() {
         <p className="text-sm text-muted-foreground">Сводные данные за текущий период</p>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-6 gap-4">
         {metrics.map(m => (
           <div key={m.label} className="metric-card">
             <div className="flex items-start justify-between">
