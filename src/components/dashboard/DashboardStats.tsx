@@ -3,7 +3,7 @@ import Icon from '@/components/ui/icon';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { CALL_RESULTS } from '@/data/mockData';
 
-type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
+type MasterStat = { userId: string; name: string; total: number; done: number; contacted: number; rate: number };
 type PersonalStat = { result: string; label: string; count: number; color: string };
 
 type Props = {
@@ -47,6 +47,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
 
   const teamTotal = mastersStats.reduce((s, m) => s + m.total, 0);
   const teamDone = mastersStats.reduce((s, m) => s + m.done, 0);
+  const teamContacted = mastersStats.reduce((s, m) => s + (m.contacted ?? 0), 0);
 
   const successCount = personalMonthStats.filter(s => SUCCESS_RESULTS.has(s.result)).reduce((s, x) => s + x.count, 0);
   const totalProcessed = personalMonthStats.reduce((s, x) => s + x.count, 0);
@@ -76,6 +77,15 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
             </div>
             <div>
               <p className="text-lg font-bold text-success leading-tight">{done}</p>
+              <p className="text-xs text-muted-foreground">Записано</p>
+            </div>
+          </div>
+          <div className="metric-card !p-3 !rounded-lg flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Icon name="PhoneCall" size={16} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-primary leading-tight">{teamContacted}</p>
               <p className="text-xs text-muted-foreground">Обработано</p>
             </div>
           </div>

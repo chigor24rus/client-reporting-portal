@@ -99,7 +99,8 @@ def handler(event: dict, context) -> dict:
                 cur.execute("""
                     SELECT u.id as user_id, u.name,
                            COUNT(c.id) FILTER (WHERE c.result IS NOT NULL) as total,
-                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) as done
+                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) as done,
+                           COUNT(c.id) as contacted
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
                     LEFT JOIN clients c ON c.master_id = m.id AND c.is_excluded = FALSE
@@ -112,11 +113,13 @@ def handler(event: dict, context) -> dict:
                 for r in rows:
                     total = r['total'] or 0
                     done = r['done'] or 0
+                    contacted = r['contacted'] or 0
                     stats.append({
                         'userId': str(r['user_id']),
                         'name': ' '.join(r['name'].split()[:2]),
                         'total': total,
                         'done': done,
+                        'contacted': contacted,
                         'rate': round((done / total * 100)) if total else 0,
                     })
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': stats}, ensure_ascii=False)}
