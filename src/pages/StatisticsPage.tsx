@@ -164,8 +164,9 @@ export default function StatisticsPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }}
-                    labelStyle={{ color: 'hsl(210 20% 88%)' }}
+                    contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12, color: '#fff' }}
+                    labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
