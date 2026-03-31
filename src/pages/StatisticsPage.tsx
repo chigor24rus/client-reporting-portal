@@ -276,14 +276,26 @@ export default function StatisticsPage() {
                     <tr>
                       <th className="text-left">Дата</th>
                       {masters.map(m => (
-                        <th key={m.userId} className="text-center whitespace-nowrap">{m.name}</th>
+                        <th key={m.userId} className="text-center whitespace-nowrap" colSpan={2}>{m.name}</th>
                       ))}
-                      <th className="text-center">Итого</th>
+                      <th className="text-center" colSpan={2}>Итого</th>
+                    </tr>
+                    <tr>
+                      <th></th>
+                      {masters.map(m => (
+                        <>
+                          <th key={m.userId + '_c'} className="text-center text-muted-foreground font-normal">Обраб.</th>
+                          <th key={m.userId + '_b'} className="text-center text-muted-foreground font-normal">Записано</th>
+                        </>
+                      ))}
+                      <th className="text-center text-muted-foreground font-normal">Обраб.</th>
+                      <th className="text-center text-muted-foreground font-normal">Записано</th>
                     </tr>
                   </thead>
                   <tbody>
                     {days.map(day => {
-                      const dayTotal = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
+                      const dayContacted = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
+                      const dayBooked = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.booked ?? 0), 0);
                       return (
                         <tr key={day}>
                           <td className="text-muted-foreground whitespace-nowrap">
@@ -291,37 +303,32 @@ export default function StatisticsPage() {
                           </td>
                           {masters.map(m => {
                             const val = map[day]?.[m.userId];
-                            const intensity = val ? Math.round((val.contacted / maxVal) * 100) : 0;
                             return (
-                              <td key={m.userId} className="text-center p-1">
-                                {val ? (
-                                  <span
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-xs font-semibold cursor-default"
-                                    style={{
-                                      background: `hsla(142, 72%, 42%, ${0.15 + intensity * 0.0085})`,
-                                      color: intensity > 50 ? 'hsl(142 72% 62%)' : 'hsl(142 72% 42%)',
-                                    }}
-                                    title={`${val.contacted} обработано, ${val.booked} записано`}
-                                  >
-                                    {val.contacted}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/30">—</span>
-                                )}
-                              </td>
+                              <>
+                                <td key={m.userId + '_c'} className="text-center text-foreground">{val ? val.contacted : <span className="text-muted-foreground/30">—</span>}</td>
+                                <td key={m.userId + '_b'} className="text-center text-success font-semibold">{val ? val.booked : <span className="text-muted-foreground/30">—</span>}</td>
+                              </>
                             );
                           })}
-                          <td className="text-center font-semibold text-foreground">{dayTotal}</td>
+                          <td className="text-center font-semibold text-foreground">{dayContacted || <span className="text-muted-foreground/30">—</span>}</td>
+                          <td className="text-center font-semibold text-success">{dayBooked || <span className="text-muted-foreground/30">—</span>}</td>
                         </tr>
                       );
                     })}
                     <tr className="border-t border-border">
                       <td className="font-semibold text-foreground">Итого</td>
                       {masters.map(m => {
-                        const total = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.contacted, 0);
-                        return <td key={m.userId} className="text-center font-semibold text-foreground">{total || '—'}</td>;
+                        const tc = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.contacted, 0);
+                        const tb = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.booked, 0);
+                        return (
+                          <>
+                            <td key={m.userId + '_c'} className="text-center font-semibold text-foreground">{tc || '—'}</td>
+                            <td key={m.userId + '_b'} className="text-center font-semibold text-success">{tb || '—'}</td>
+                          </>
+                        );
                       })}
                       <td className="text-center font-bold text-primary">{monthTotal}</td>
+                      <td className="text-center font-bold text-success">{dailyStats.reduce((s, x) => s + x.booked, 0)}</td>
                     </tr>
                   </tbody>
                 </table>
