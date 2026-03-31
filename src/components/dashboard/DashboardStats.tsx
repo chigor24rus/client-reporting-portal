@@ -234,20 +234,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
               );
             }) : <p className="text-sm text-muted-foreground">Нет данных</p>}
           </div>
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-lg font-bold text-foreground">{teamTotal}</p>
-              <p className="text-xs text-muted-foreground">Клиентов</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-success">{teamDone}</p>
-              <p className="text-xs text-muted-foreground">Записано</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-primary">{teamTotal ? Math.round((teamDone / teamTotal) * 100) : 0}%</p>
-              <p className="text-xs text-muted-foreground">Готовность</p>
-            </div>
-          </div>
+
         </div>
       </div>
     </>
