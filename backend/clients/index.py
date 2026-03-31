@@ -99,7 +99,7 @@ def handler(event: dict, context) -> dict:
                 cur.execute("""
                     SELECT u.id as user_id, u.name,
                            COUNT(c.id) FILTER (WHERE c.result IS NOT NULL) as total,
-                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok','gift_no')) as done
+                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) as done
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
                     LEFT JOIN clients c ON c.master_id = m.id AND c.is_excluded = FALSE
