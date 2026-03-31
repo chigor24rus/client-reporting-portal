@@ -312,6 +312,7 @@ def handler(event: dict, context) -> dict:
                            c.order_number, c.master_id, c.status, c.result, c.result_note,
                            c.callback_date, c.is_excluded, c.birth_date, c.total_spent, c.is_test
                     FROM clients c
+                    WHERE c.is_test = FALSE
                     ORDER BY c.phone, c.vin, c.work, c.work_date DESC
                 """)
                 rows = cur.fetchall()
