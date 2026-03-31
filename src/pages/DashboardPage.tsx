@@ -54,9 +54,9 @@ export default function DashboardPage() {
   }, [clientCards, filter]);
 
   const pending = clientCards.filter(c => c.status !== 'done').length;
-  const myStat = mastersStats.find(m => m.userId === user?.id);
+  const myStat = mastersStats.find(m => String(m.userId) === String(user?.id));
   const done = myStat?.done ?? 0;
-  const total = myStat?.total ?? clientCards.length;
+  const total = myStat?.total ?? clientCards.filter(c => !c.isDeferred).length;
 
   const masterStats = useMemo(() => {
     return masters.map(m => {
