@@ -231,7 +231,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
             </div>
             <div>
               <p className="text-lg font-bold text-success">{teamDone}</p>
-              <p className="text-xs text-muted-foreground">Обработано</p>
+              <p className="text-xs text-muted-foreground">Записано</p>
             </div>
             <div>
               <p className="text-lg font-bold text-primary">{teamTotal ? Math.round((teamDone / teamTotal) * 100) : 0}%</p>
