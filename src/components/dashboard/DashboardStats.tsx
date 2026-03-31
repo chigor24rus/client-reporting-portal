@@ -34,6 +34,8 @@ const RESULT_COLORS: Record<string, string> = {
   'gift_no': 'hsl(320 50% 40%)',
 };
 
+const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
+
 export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, personalMonthStats, personalQuarterStats }: Props) {
   const [leftPeriod, setLeftPeriod] = useState<'month' | 'quarter'>('month');
   const [rightPeriod, setRightPeriod] = useState<'month' | 'quarter'>('month');
@@ -42,6 +44,14 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
   const quarterMasters = [...mastersStats].sort((a, b) => b.rate - a.rate);
 
   const teamStats = rightPeriod === 'month' ? monthMasters : quarterMasters;
+
+  const teamTotal = mastersStats.reduce((s, m) => s + m.total, 0);
+  const teamDone = mastersStats.reduce((s, m) => s + m.done, 0);
+
+  const successStats = personalMonthStats.filter(s => SUCCESS_RESULTS.has(s.result));
+  const otherStats = personalMonthStats.filter(s => !SUCCESS_RESULTS.has(s.result));
+  const successCount = successStats.reduce((s, x) => s + x.count, 0);
+  const totalProcessed = personalMonthStats.reduce((s, x) => s + x.count, 0);
 
   return (
     <>
@@ -114,29 +124,59 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
 
           {leftPeriod === 'month' ? (
             personalMonthStats.length > 0 ? (
-              <div className="flex gap-4 items-center">
-                <ResponsiveContainer width={140} height={140}>
-                  <PieChart>
-                    <Pie data={personalMonthStats} cx="50%" cy="50%" innerRadius={38} outerRadius={60} paddingAngle={2} dataKey="count">
-                      {personalMonthStats.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 11 }}
-                      formatter={(value: number, name: string) => [value, name]} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex-1 space-y-1.5">
-                  {personalMonthStats.map((s, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                        <span className="text-muted-foreground truncate max-w-[120px]">{s.label}</span>
+              <div className="space-y-3">
+                <div className="flex gap-4 items-center">
+                  <ResponsiveContainer width={140} height={140}>
+                    <PieChart>
+                      <Pie data={personalMonthStats} cx="50%" cy="50%" innerRadius={38} outerRadius={60} paddingAngle={2} dataKey="count">
+                        {personalMonthStats.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 11 }}
+                        formatter={(value: number, name: string) => [value, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex-1 space-y-1.5">
+                    {personalMonthStats.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                          <span className="text-muted-foreground truncate max-w-[120px]">{s.label}</span>
+                        </div>
+                        <span className="font-semibold text-foreground ml-2">{s.count}</span>
                       </div>
-                      <span className="font-semibold text-foreground ml-2">{s.count}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+                <div className="pt-3 border-t border-border grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-base font-bold text-foreground">{totalProcessed}</p>
+                    <p className="text-xs text-muted-foreground">Клиентов</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-success">{successCount}</p>
+                    <p className="text-xs text-muted-foreground">Записано</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-primary">{totalProcessed ? Math.round((successCount / totalProcessed) * 100) : 0}%</p>
+                    <p className="text-xs text-muted-foreground">Конверсия</p>
+                  </div>
+                </div>
+                {otherStats.length > 0 && (
+                  <div className="pt-2 space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Прочие результаты</p>
+                    {otherStats.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                          <span className="text-muted-foreground truncate max-w-[150px]">{s.label}</span>
+                        </div>
+                        <span className="font-semibold text-foreground ml-2">{s.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет обработанных клиентов</div>
@@ -201,15 +241,15 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
           </div>
           <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-2 text-center">
             <div>
-              <p className="text-lg font-bold text-foreground">{total}</p>
+              <p className="text-lg font-bold text-foreground">{teamTotal}</p>
               <p className="text-xs text-muted-foreground">Клиентов</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-success">{done}</p>
+              <p className="text-lg font-bold text-success">{teamDone}</p>
               <p className="text-xs text-muted-foreground">Обработано</p>
             </div>
             <div>
-              <p className="text-lg font-bold text-primary">{total ? Math.round((done / total) * 100) : 0}%</p>
+              <p className="text-lg font-bold text-primary">{teamTotal ? Math.round((teamDone / teamTotal) * 100) : 0}%</p>
               <p className="text-xs text-muted-foreground">Готовность</p>
             </div>
           </div>
