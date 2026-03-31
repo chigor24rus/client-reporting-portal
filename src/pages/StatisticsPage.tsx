@@ -75,7 +75,7 @@ export default function StatisticsPage() {
     const byWork = Object.entries(WORK_INTERVALS).map(([work, meta]) => ({
       name: meta.label,
       total: all.filter(c => c.work === work).length,
-      done: all.filter(c => c.work === work && c.status === 'done').length,
+      done: all.filter(c => c.work === work && c.result !== null && SUCCESS_RESULTS.has(c.result)).length,
     }));
 
     const byMaster: { name: string; total: number; booked: number; callback: number; rate: number }[] = [];
@@ -198,7 +198,7 @@ export default function StatisticsPage() {
               <YAxis dataKey="name" type="category" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
               <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} />
               <Bar dataKey="total" name="Всего" fill="hsl(200 80% 48%)" radius={[0, 3, 3, 0]} />
-              <Bar dataKey="done" name="Обработано" fill="hsl(142 72% 42%)" radius={[0, 3, 3, 0]} />
+              <Bar dataKey="done" name="Записано" fill="hsl(142 72% 42%)" radius={[0, 3, 3, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
