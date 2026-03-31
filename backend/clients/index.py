@@ -94,8 +94,26 @@ def handler(event: dict, context) -> dict:
             test_filter = "AND c.is_test = FALSE" if hide_test else ""
             test_filter_no_alias = "AND is_test = FALSE" if hide_test else ""
 
-            # ─── Активность мастеров по дням ────────────────────────────────
+            # ─── Активность мастеров по дням за месяц ───────────────────────
             if qs.get('daily_stats') == 'true':
+                # month=YYYY-MM, по умолчанию текущий месяц
+                month_param = qs.get('month', '')
+                try:
+                    from datetime import datetime as dt
+                    if month_param:
+                        month_start = dt.strptime(month_param, '%Y-%m').date().replace(day=1)
+                    else:
+                        today_d = date.today()
+                        month_start = today_d.replace(day=1)
+                    # последний день месяца
+                    if month_start.month == 12:
+                        month_end = month_start.replace(year=month_start.year + 1, month=1, day=1)
+                    else:
+                        month_end = month_start.replace(month=month_start.month + 1, day=1)
+                except ValueError:
+                    today_d = date.today()
+                    month_start = today_d.replace(day=1)
+                    month_end = month_start.replace(month=month_start.month + 1, day=1) if month_start.month < 12 else month_start.replace(year=month_start.year + 1, month=1, day=1)
                 cur.execute("""
                     SELECT DATE(c.updated_at) AS day,
                            u.id AS user_id,
@@ -110,10 +128,11 @@ def handler(event: dict, context) -> dict:
                       AND c.is_test = FALSE
                       AND u.active = TRUE
                       AND u.is_test = FALSE
-                      AND c.updated_at >= NOW() - INTERVAL '30 days'
+                      AND DATE(c.updated_at) >= %s
+                      AND DATE(c.updated_at) < %s
                     GROUP BY DATE(c.updated_at), u.id, u.name
-                    ORDER BY day DESC, u.name
-                """)
+                    ORDER BY day ASC, u.name
+                """, (month_start, month_end))
                 rows = cur.fetchall()
                 result = []
                 for r in rows:
@@ -124,7 +143,7 @@ def handler(event: dict, context) -> dict:
                         'contacted': r['contacted'],
                         'booked': r['booked'],
                     })
-                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': result}, ensure_ascii=False)}
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': result, 'month': month_start.strftime('%Y-%m')}, ensure_ascii=False)}
 
             # ─── Количество актуальных ожидающих клиентов (для страницы статистики админа) ───────────────
             if qs.get('pending_count') == 'true':

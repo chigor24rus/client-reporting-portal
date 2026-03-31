@@ -30,15 +30,27 @@ export default function StatisticsPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
 
   useEffect(() => {
     apiGetPendingCount().then(({ status, data }) => {
       if (status === 200) setPendingCount((data as { pending: number }).pending);
     });
-    apiGetDailyStats().then(({ status, data }) => {
+  }, []);
+
+  useEffect(() => {
+    apiGetDailyStats(selectedMonth).then(({ status, data }) => {
       if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
     });
-  }, []);
+  }, [selectedMonth]);
+
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    return { val, label: label.charAt(0).toUpperCase() + label.slice(1) };
+  });
 
   const summary = useMemo(() => {
     const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
@@ -230,8 +242,8 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      {dailyStats.length > 0 && (() => {
-        const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => b.localeCompare(a));
+      {(() => {
+        const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => a.localeCompare(b));
         const masters = [...new Map(dailyStats.map(s => [s.userId, s.name])).entries()].map(([userId, name]) => ({ userId, name }));
         const map: Record<string, Record<string, { contacted: number; booked: number }>> = {};
         dailyStats.forEach(s => {
@@ -239,57 +251,84 @@ export default function StatisticsPage() {
           map[s.day][s.userId] = { contacted: s.contacted, booked: s.booked };
         });
         const maxVal = Math.max(...dailyStats.map(s => s.contacted), 1);
+        const monthTotal = dailyStats.reduce((s, x) => s + x.contacted, 0);
         return (
           <div className="metric-card">
-            <p className="text-sm font-semibold text-foreground mb-4">Активность по дням (последние 30 дней)</p>
-            <div className="overflow-x-auto">
-              <table className="w-full data-table text-xs">
-                <thead>
-                  <tr>
-                    <th className="text-left">Дата</th>
-                    {masters.map(m => (
-                      <th key={m.userId} className="text-center whitespace-nowrap">{m.name}</th>
-                    ))}
-                    <th className="text-center">Итого</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map(day => {
-                    const dayTotal = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
-                    return (
-                      <tr key={day}>
-                        <td className="text-muted-foreground whitespace-nowrap">
-                          {new Date(day).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
-                        </td>
-                        {masters.map(m => {
-                          const val = map[day]?.[m.userId];
-                          const intensity = val ? Math.round((val.contacted / maxVal) * 100) : 0;
-                          return (
-                            <td key={m.userId} className="text-center p-1">
-                              {val ? (
-                                <span
-                                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-xs font-semibold"
-                                  style={{
-                                    background: `hsla(142, 72%, 42%, ${0.15 + intensity * 0.0085})`,
-                                    color: intensity > 50 ? 'hsl(142 72% 62%)' : 'hsl(142 72% 42%)',
-                                  }}
-                                  title={`${val.contacted} обработано, ${val.booked} записано`}
-                                >
-                                  {val.contacted}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/30">—</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="text-center font-semibold text-foreground">{dayTotal}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Активность по дням</p>
+                {monthTotal > 0 && <p className="text-xs text-muted-foreground">Всего обработано за месяц: <span className="text-foreground font-semibold">{monthTotal}</span></p>}
+              </div>
+              <select
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {monthOptions.map(o => (
+                  <option key={o.val} value={o.val}>{o.label}</option>
+                ))}
+              </select>
             </div>
+            {days.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full data-table text-xs">
+                  <thead>
+                    <tr>
+                      <th className="text-left">Дата</th>
+                      {masters.map(m => (
+                        <th key={m.userId} className="text-center whitespace-nowrap">{m.name}</th>
+                      ))}
+                      <th className="text-center">Итого</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map(day => {
+                      const dayTotal = masters.reduce((s, m) => s + (map[day]?.[m.userId]?.contacted ?? 0), 0);
+                      return (
+                        <tr key={day}>
+                          <td className="text-muted-foreground whitespace-nowrap">
+                            {new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
+                          </td>
+                          {masters.map(m => {
+                            const val = map[day]?.[m.userId];
+                            const intensity = val ? Math.round((val.contacted / maxVal) * 100) : 0;
+                            return (
+                              <td key={m.userId} className="text-center p-1">
+                                {val ? (
+                                  <span
+                                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-xs font-semibold cursor-default"
+                                    style={{
+                                      background: `hsla(142, 72%, 42%, ${0.15 + intensity * 0.0085})`,
+                                      color: intensity > 50 ? 'hsl(142 72% 62%)' : 'hsl(142 72% 42%)',
+                                    }}
+                                    title={`${val.contacted} обработано, ${val.booked} записано`}
+                                  >
+                                    {val.contacted}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/30">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="text-center font-semibold text-foreground">{dayTotal}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t border-border">
+                      <td className="font-semibold text-foreground">Итого</td>
+                      {masters.map(m => {
+                        const total = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.contacted, 0);
+                        return <td key={m.userId} className="text-center font-semibold text-foreground">{total || '—'}</td>;
+                      })}
+                      <td className="text-center font-bold text-primary">{monthTotal}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="h-20 flex items-center justify-center text-muted-foreground text-sm">Нет данных за выбранный месяц</div>
+            )}
           </div>
         );
       })()}
