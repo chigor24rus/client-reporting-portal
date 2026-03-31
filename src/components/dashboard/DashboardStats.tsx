@@ -76,8 +76,8 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
               <Icon name="CheckCircle2" size={16} className="text-success" />
             </div>
             <div>
-              <p className="text-lg font-bold text-success leading-tight">{done}</p>
-              <p className="text-xs text-muted-foreground">Записано</p>
+              <p className="text-lg font-bold text-success leading-tight">{teamDone}</p>
+              <p className="text-xs text-muted-foreground">Записаны</p>
             </div>
           </div>
           <div className="metric-card !p-3 !rounded-lg flex items-center gap-2.5">
@@ -85,7 +85,7 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
               <Icon name="PhoneCall" size={16} className="text-primary" />
             </div>
             <div>
-              <p className="text-lg font-bold text-primary leading-tight">{teamContacted}</p>
+              <p className="text-lg font-bold text-primary leading-tight">{teamTotal}</p>
               <p className="text-xs text-muted-foreground">Обработано</p>
             </div>
           </div>
