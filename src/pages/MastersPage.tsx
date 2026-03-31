@@ -147,7 +147,7 @@ export default function MastersPage() {
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">{master.phone}</p>
 
-                  <div className="mt-3 grid grid-cols-3 gap-3">
+                  <div className="mt-3 grid grid-cols-3 gap-3 hidden">
                     <div className="bg-secondary/50 rounded-lg p-2.5 text-center">
                       <p className="text-base font-bold text-foreground">{stats.total}</p>
                       <p className="text-xs text-muted-foreground">Клиентов</p>
@@ -164,15 +164,7 @@ export default function MastersPage() {
                     </div>
                   </div>
 
-                  {stats.total > 0 && (
-                    <div className="mt-2 h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-700"
-                        style={{
-                          width: `${stats.rate}%`,
-                          background: stats.rate >= 70 ? 'hsl(142 72% 42%)' : stats.rate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)',
-                        }} />
-                    </div>
-                  )}
+
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
