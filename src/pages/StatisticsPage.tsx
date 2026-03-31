@@ -59,15 +59,17 @@ export default function StatisticsPage() {
     const masters = apiUsers.filter(u => u.role === 'master' && u.active && !u.isTest);
     const byMaster = masters.map(m => {
       const mc = all.filter(c => c.masterId === m.masterId);
-      const md = mc.filter(c => c.result !== null).length;
+      const contacted = mc.filter(c => c.result !== null).length;
+      const booked = mc.filter(c => c.result !== null && SUCCESS_RESULTS.has(c.result)).length;
+      const callback = mc.filter(c => c.result === '5').length;
       return {
         name: m.name.split(' ').slice(0, 2).join(' '),
-        total: mc.length,
-        done: md,
-        pending: mc.filter(c => c.result === null).length,
-        rate: mc.length ? Math.round((md / mc.length) * 100) : 0,
+        total: contacted,
+        booked,
+        callback,
+        rate: contacted ? Math.round((booked / contacted) * 100) : 0,
       };
-    }).sort((a, b) => b.rate - a.rate || b.done - a.done);
+    }).sort((a, b) => b.rate - a.rate || b.booked - a.booked);
 
     const today = new Date();
     const birthdays = clients.filter(c => {
@@ -183,10 +185,10 @@ export default function StatisticsPage() {
             <thead>
               <tr>
                 <th>Мастер</th>
-                <th className="text-center">Всего</th>
                 <th className="text-center">Обработано</th>
-                <th className="text-center">Ожидают</th>
-                <th className="text-center">Готовность</th>
+                <th className="text-center">Записано</th>
+                <th className="text-center">Повторный созвон</th>
+                <th className="text-center">Конверсия</th>
                 <th className="w-40">Прогресс</th>
               </tr>
             </thead>
@@ -198,8 +200,8 @@ export default function StatisticsPage() {
                     {m.name}
                   </td>
                   <td className="text-center text-foreground">{m.total}</td>
-                  <td className="text-center text-success font-semibold">{m.done}</td>
-                  <td className="text-center text-warning">{m.pending}</td>
+                  <td className="text-center text-success font-semibold">{m.booked}</td>
+                  <td className="text-center text-warning">{m.callback}</td>
                   <td className="text-center">
                     <span className={`font-bold text-sm ${m.rate >= 70 ? 'text-success' : m.rate >= 40 ? 'text-warning' : 'text-destructive'}`}>
                       {m.rate}%
