@@ -125,6 +125,7 @@ def handler(event: dict, context) -> dict:
                     JOIN users u ON u.id = m.user_id
                     WHERE c.result IS NOT NULL
                       AND c.is_test = FALSE
+                      AND c.is_excluded = FALSE
                       AND u.active = TRUE
                       AND u.is_test = FALSE
                       AND DATE(c.updated_at) >= %s
