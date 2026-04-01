@@ -189,9 +189,9 @@ def handler(event: dict, context) -> dict:
             if qs.get('masters_stats') == 'true':
                 cur.execute("""
                     SELECT u.id as user_id, u.name,
-                           COUNT(c.id) FILTER (WHERE c.result IS NOT NULL) as total,
-                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) as done,
-                           COUNT(c.id) as contacted
+                           COUNT(c.id) FILTER (WHERE c.result IS NOT NULL AND c.is_test = FALSE AND c.is_excluded = FALSE) as total,
+                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok') AND c.is_test = FALSE AND c.is_excluded = FALSE) as done,
+                           COUNT(c.id) FILTER (WHERE c.is_test = FALSE AND c.is_excluded = FALSE) as contacted
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
                     LEFT JOIN clients c ON c.master_id = m.id
