@@ -29,7 +29,7 @@ export default function StatisticsPage() {
   const { clients = [], apiUsers = [] } = useApp();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
-  type MasterStat = { userId: string; name: string; total: number; done: number; contacted: number; rate: number };
+  type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
   const now = new Date();
@@ -64,7 +64,7 @@ export default function StatisticsPage() {
     const done = all.filter(c => c.result !== null).length;
     const booked = all.filter(c => c.result !== null && SUCCESS_RESULTS.has(c.result)).length;
     const pending = all.filter(c => c.result === null).length;
-    const excluded = clients.filter(c => c.isExcluded).length;
+    const excluded = clients.filter(c => c.isExcluded && !c.isTest).length;
 
     const byResult = CALL_RESULTS.map(r => ({
       name: r.label,
@@ -81,7 +81,7 @@ export default function StatisticsPage() {
     const byMaster: { name: string; total: number; booked: number; callback: number; rate: number }[] = [];
 
     const today = new Date();
-    const birthdays = clients.filter(c => {
+    const birthdays = all.filter(c => {
       if (!c.birthDate) return false;
       const d = new Date(c.birthDate);
       const diff = Math.abs(
@@ -95,20 +95,14 @@ export default function StatisticsPage() {
   }, [clients, apiUsers]);
 
   const byMaster = useMemo(() => {
-    const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
-    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
-    return mastersStats.map(m => {
-      const mc = all.filter(c => String(c.masterId) === m.userId);
-      const callback = mc.filter(c => c.result === '5').length;
-      return {
-        name: m.name,
-        total: m.total,
-        booked: m.done,
-        callback,
-        rate: m.total ? Math.round((m.done / m.total) * 100) : 0,
-      };
-    }).sort((a, b) => b.rate - a.rate || b.booked - a.booked);
-  }, [mastersStats, clients]);
+    return mastersStats.map(m => ({
+      name: m.name,
+      total: m.total,
+      booked: m.done,
+      callback: m.callback,
+      rate: m.total ? Math.round((m.done / m.total) * 100) : 0,
+    })).sort((a, b) => b.rate - a.rate || b.booked - a.booked);
+  }, [mastersStats]);
 
   const metrics = [
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },

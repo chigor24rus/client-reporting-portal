@@ -189,15 +189,16 @@ def handler(event: dict, context) -> dict:
             # ─── Статистика мастеров (для виджета на дашборде) ──────────────
             if qs.get('masters_stats') == 'true':
                 cur.execute("""
-                    SELECT u.id as user_id, u.name,
+                    SELECT u.id as user_id, m.id as master_id, u.name,
                            COUNT(c.id) FILTER (WHERE c.result IS NOT NULL AND c.is_test = FALSE AND c.is_excluded = FALSE) as total,
                            COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok') AND c.is_test = FALSE AND c.is_excluded = FALSE) as done,
+                           COUNT(c.id) FILTER (WHERE c.result = '5' AND c.is_test = FALSE AND c.is_excluded = FALSE) as callback,
                            COUNT(c.id) FILTER (WHERE c.is_test = FALSE AND c.is_excluded = FALSE) as contacted
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
                     LEFT JOIN clients c ON c.master_id = m.id
                     WHERE u.role = 'master' AND u.active = TRUE AND u.is_test = FALSE
-                    GROUP BY u.id, u.name
+                    GROUP BY u.id, m.id, u.name
                     ORDER BY done DESC, total DESC
                 """)
                 rows = cur.fetchall()
@@ -206,11 +207,14 @@ def handler(event: dict, context) -> dict:
                     total = r['total'] or 0
                     done = r['done'] or 0
                     contacted = r['contacted'] or 0
+                    callback = r['callback'] or 0
                     stats.append({
                         'userId': str(r['user_id']),
+                        'masterId': str(r['master_id']),
                         'name': ' '.join(r['name'].split()[:2]),
                         'total': total,
                         'done': done,
+                        'callback': callback,
                         'contacted': contacted,
                         'rate': round((done / total * 100)) if total else 0,
                     })
