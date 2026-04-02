@@ -15,10 +15,13 @@ type Props = {
   myStat?: MasterStat;
   personalMonthStats: PersonalStat[];
   personalQuarterStats: { name: string; done: number; pending: number }[];
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
+  monthOptions: { val: string; label: string }[];
 };
 
 
-export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, myStat, personalMonthStats: _personalMonthStats, personalQuarterStats: _personalQuarterStats }: Props) {
+export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, myStat, personalMonthStats: _personalMonthStats, personalQuarterStats: _personalQuarterStats, selectedMonth, onMonthChange, monthOptions }: Props) {
   const [rightPeriod, setRightPeriod] = useState<'month' | 'quarter'>('month');
 
   const monthMasters = mastersStats;
@@ -45,6 +48,19 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Icon name="Calendar" size={15} className="text-muted-foreground" />
+            <select
+              value={selectedMonth}
+              onChange={e => onMonthChange(e.target.value)}
+              className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">Все время</option>
+              {monthOptions.map(o => (
+                <option key={o.val} value={o.val}>{o.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="metric-card !p-3 !rounded-lg flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
               <Icon name="Clock" size={16} className="text-warning" />

@@ -18,21 +18,32 @@ export default function DashboardPage() {
   const [searchDone, setSearchDone] = useState(false);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
 
-  const refreshMastersStats = useCallback(() => {
-    apiGetMastersStats().then(({ status, data }) => {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  const monthOptions = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    return { val, label: label.charAt(0).toUpperCase() + label.slice(1) };
+  });
+
+  const refreshMastersStats = useCallback((month?: string) => {
+    apiGetMastersStats(month).then(({ status, data }) => {
       if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
     });
   }, []);
 
   useEffect(() => {
-    refreshMastersStats();
-  }, [refreshMastersStats]);
+    refreshMastersStats(selectedMonth);
+  }, [selectedMonth]);
 
   const handleSync = useCallback(async (...args: Parameters<typeof syncClientResult>) => {
     const result = await syncClientResult(...args);
-    refreshMastersStats();
+    refreshMastersStats(selectedMonth);
     return result;
-  }, [syncClientResult, refreshMastersStats]);
+  }, [syncClientResult, refreshMastersStats, selectedMonth]);
 
   const birthdayCount = useMemo(() => clientCards.filter(c => c.isBirthday).length, [clientCards]);
 
@@ -87,6 +98,9 @@ export default function DashboardPage() {
         myStat={myStat}
         personalMonthStats={personalMonthStats}
         personalQuarterStats={personalQuarterStats}
+        selectedMonth={selectedMonth}
+        onMonthChange={setSelectedMonth}
+        monthOptions={monthOptions}
       />
 
       <div>
