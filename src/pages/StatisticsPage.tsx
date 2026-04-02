@@ -5,7 +5,7 @@ import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsSt
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 
 const RESULT_COLORS: Record<string, string> = {
@@ -30,50 +30,16 @@ export default function StatisticsPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
+  type CallsStat = { master: string; incoming: number; outgoing: number; month: string };
+
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
-  type CallsStat = { master: string; incoming: number; outgoing: number; month: string };
   const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
   const [callsMonths, setCallsMonths] = useState<string[]>([]);
+
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-  const [selectedCallsMonth, setSelectedCallsMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-  const [selectedMastersMonth, setSelectedMastersMonth] = useState('');
-
-  useEffect(() => {
-    apiGetPendingCount().then(({ status, data }) => {
-      if (status === 200) setPendingCount((data as { pending: number }).pending);
-    });
-    apiGetMastersStats(selectedMastersMonth || undefined).then(({ status, data }) => {
-      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
-    });
-    apiGetCallsStats().then(({ status, data }) => {
-      if (status === 200) {
-        const d = data as { stats: CallsStat[]; months: string[] };
-        setCallsMonths(d.months);
-        if (d.months.length > 0) setSelectedCallsMonth(d.months[0]);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    apiGetDailyStats(selectedMonth).then(({ status, data }) => {
-      if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
-    });
-  }, [selectedMonth]);
-
-  useEffect(() => {
-    apiGetMastersStats(selectedMastersMonth || undefined).then(({ status, data }) => {
-      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
-    });
-  }, [selectedMastersMonth]);
-
-  useEffect(() => {
-    if (!selectedCallsMonth) return;
-    apiGetCallsStats(selectedCallsMonth).then(({ status, data }) => {
-      if (status === 200) setCallsStats((data as { stats: CallsStat[]; months: string[] }).stats);
-    });
-  }, [selectedCallsMonth]);
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [globalMonth, setGlobalMonth] = useState(currentMonth);
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -81,6 +47,38 @@ export default function StatisticsPage() {
     const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
     return { val, label: label.charAt(0).toUpperCase() + label.slice(1) };
   });
+
+  const selectedMonthLabel = globalMonth
+    ? (monthOptions.find(o => o.val === globalMonth)?.label ?? globalMonth)
+    : 'Все время';
+
+  useEffect(() => {
+    apiGetPendingCount().then(({ status, data }) => {
+      if (status === 200) setPendingCount((data as { pending: number }).pending);
+    });
+    apiGetCallsStats().then(({ status, data }) => {
+      if (status === 200) {
+        const d = data as { stats: CallsStat[]; months: string[] };
+        setCallsMonths(d.months);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    apiGetMastersStats(globalMonth || undefined).then(({ status, data }) => {
+      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
+    });
+    apiGetDailyStats(globalMonth || currentMonth).then(({ status, data }) => {
+      if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
+    });
+    if (globalMonth) {
+      apiGetCallsStats(globalMonth).then(({ status, data }) => {
+        if (status === 200) setCallsStats((data as { stats: CallsStat[]; months: string[] }).stats);
+      });
+    } else {
+      setCallsStats([]);
+    }
+  }, [globalMonth]);
 
   const summary = useMemo(() => {
     const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
@@ -103,20 +101,18 @@ export default function StatisticsPage() {
       done: all.filter(c => c.work === work && c.result !== null && SUCCESS_RESULTS.has(c.result)).length,
     }));
 
-    const byMaster: { name: string; total: number; booked: number; callback: number; rate: number }[] = [];
-
     const today = new Date();
     const birthdays = all.filter(c => {
       if (!c.birthDate) return false;
       const d = new Date(c.birthDate);
       const diff = Math.abs(
-        new Date(today.getFullYear(), d.getMonth(), d.getDate()).getTime() - 
+        new Date(today.getFullYear(), d.getMonth(), d.getDate()).getTime() -
         new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
       ) / 86400000;
       return diff <= 7;
     }).length;
 
-    return { total, done, booked, pending, excluded, byResult, byWork, byMaster, birthdays };
+    return { total, done, booked, pending, excluded, byResult, byWork, birthdays };
   }, [clients, apiUsers]);
 
   const byMaster = useMemo(() => {
@@ -140,9 +136,26 @@ export default function StatisticsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Статистика</h1>
-        <p className="text-sm text-muted-foreground">Сводные данные за текущий период</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Статистика</h1>
+          <p className="text-sm text-muted-foreground">
+            {globalMonth ? `Данные за: ${selectedMonthLabel}` : 'Данные за все время'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Icon name="Calendar" size={16} className="text-muted-foreground" />
+          <select
+            value={globalMonth}
+            onChange={e => setGlobalMonth(e.target.value)}
+            className="bg-secondary border border-border text-foreground text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 font-medium"
+          >
+            <option value="">Все время</option>
+            {monthOptions.map(o => (
+              <option key={o.val} value={o.val}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-6 gap-4">
@@ -224,19 +237,7 @@ export default function StatisticsPage() {
       </div>
 
       <div className="metric-card">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-foreground">Показатели мастеров</p>
-          <select
-            value={selectedMastersMonth}
-            onChange={e => setSelectedMastersMonth(e.target.value)}
-            className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <option value="">Все время</option>
-            {monthOptions.map(o => (
-              <option key={o.val} value={o.val}>{o.label}</option>
-            ))}
-          </select>
-        </div>
+        <p className="text-sm font-semibold text-foreground mb-4">Показатели мастеров</p>
         <div className="overflow-x-auto">
           <table className="w-full data-table">
             <thead>
@@ -283,30 +284,24 @@ export default function StatisticsPage() {
       </div>
 
       <div className="metric-card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
-            <p className="text-xs text-muted-foreground">Уникальные звонки по документам из 1С</p>
-          </div>
-          {callsMonths.length > 0 && (
-            <select
-              value={selectedCallsMonth}
-              onChange={e => setSelectedCallsMonth(e.target.value)}
-              className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              {callsMonths.map(m => {
-                const [y, mo] = m.split('-');
-                const d = new Date(Number(y), Number(mo) - 1, 1);
-                const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-                return <option key={m} value={m}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
-              })}
-            </select>
-          )}
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
+          <p className="text-xs text-muted-foreground">Уникальные звонки по документам из 1С</p>
         </div>
         {callsMonths.length === 0 ? (
           <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
             <Icon name="PhoneOff" size={18} />
             <span>Нет данных. Загрузите отчёт по звонкам из 1С в разделе «Загрузка»</span>
+          </div>
+        ) : !globalMonth ? (
+          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
+            <Icon name="Calendar" size={18} />
+            <span>Выберите конкретный месяц вверху страницы для просмотра звонков</span>
+          </div>
+        ) : !callsStats.length ? (
+          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
+            <Icon name="PhoneOff" size={18} />
+            <span>Нет данных по звонкам за {selectedMonthLabel}</span>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -338,14 +333,12 @@ export default function StatisticsPage() {
                     <td className="text-center font-bold text-foreground">{s.incoming + s.outgoing}</td>
                   </tr>
                 ))}
-                {callsStats.length > 0 && (
-                  <tr className="border-t border-border">
-                    <td className="font-semibold text-foreground">Итого</td>
-                    <td className="text-center font-semibold text-info">{callsStats.reduce((s, r) => s + r.incoming, 0)}</td>
-                    <td className="text-center font-semibold text-primary">{callsStats.reduce((s, r) => s + r.outgoing, 0)}</td>
-                    <td className="text-center font-bold text-foreground">{callsStats.reduce((s, r) => s + r.incoming + r.outgoing, 0)}</td>
-                  </tr>
-                )}
+                <tr className="border-t border-border">
+                  <td className="font-semibold text-foreground">Итого</td>
+                  <td className="text-center font-semibold text-info">{callsStats.reduce((s, r) => s + r.incoming, 0)}</td>
+                  <td className="text-center font-semibold text-primary">{callsStats.reduce((s, r) => s + r.outgoing, 0)}</td>
+                  <td className="text-center font-bold text-foreground">{callsStats.reduce((s, r) => s + r.incoming + r.outgoing, 0)}</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -360,24 +353,12 @@ export default function StatisticsPage() {
           if (!map[s.day]) map[s.day] = {};
           map[s.day][s.userId] = { contacted: s.contacted, booked: s.booked };
         });
-        const maxVal = Math.max(...dailyStats.map(s => s.contacted), 1);
         const monthTotal = dailyStats.reduce((s, x) => s + x.contacted, 0);
         return (
           <div className="metric-card">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Активность по дням</p>
-                {monthTotal > 0 && <p className="text-xs text-muted-foreground">Всего обработано за месяц: <span className="text-foreground font-semibold">{monthTotal}</span></p>}
-              </div>
-              <select
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(e.target.value)}
-                className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                {monthOptions.map(o => (
-                  <option key={o.val} value={o.val}>{o.label}</option>
-                ))}
-              </select>
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-foreground">Активность по дням</p>
+              {monthTotal > 0 && <p className="text-xs text-muted-foreground">Всего обработано: <span className="text-foreground font-semibold">{monthTotal}</span></p>}
             </div>
             {days.length > 0 ? (
               <div className="overflow-x-auto">
@@ -433,7 +414,7 @@ export default function StatisticsPage() {
                 </table>
               </div>
             ) : (
-              <div className="h-20 flex items-center justify-center text-muted-foreground text-sm">Нет данных за выбранный месяц</div>
+              <div className="h-20 flex items-center justify-center text-muted-foreground text-sm">Нет данных за выбранный период</div>
             )}
           </div>
         );
