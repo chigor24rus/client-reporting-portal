@@ -97,8 +97,9 @@ export async function apiSearchClients(query: string) {
   return request('clients', `/?search=${encodeURIComponent(query)}`);
 }
 
-export async function apiGetMastersStats() {
-  return request('clients', '/?masters_stats=true');
+export async function apiGetMastersStats(month?: string) {
+  const qs = month ? `&month=${month}` : '';
+  return request('clients', `/?masters_stats=true${qs}`);
 }
 
 export async function apiGetPendingCount() {

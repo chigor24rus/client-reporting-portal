@@ -188,19 +188,34 @@ def handler(event: dict, context) -> dict:
 
             # ─── Статистика мастеров (для виджета на дашборде) ──────────────
             if qs.get('masters_stats') == 'true':
+                month_param = qs.get('month', '')
+                month_filter = ''
+                month_start = None
+                month_end = None
+                if month_param:
+                    try:
+                        from datetime import datetime as dt
+                        month_start = dt.strptime(month_param, '%Y-%m').date().replace(day=1)
+                        if month_start.month == 12:
+                            month_end = month_start.replace(year=month_start.year + 1, month=1, day=1)
+                        else:
+                            month_end = month_start.replace(month=month_start.month + 1, day=1)
+                        month_filter = "AND c.updated_at >= '{0}' AND c.updated_at < '{1}'".format(month_start, month_end)
+                    except ValueError:
+                        pass
                 cur.execute("""
                     SELECT u.id as user_id, m.id as master_id, u.name,
-                           COUNT(c.id) FILTER (WHERE c.result IS NOT NULL AND c.is_test = FALSE AND c.is_excluded = FALSE) as total,
-                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok') AND c.is_test = FALSE AND c.is_excluded = FALSE) as done,
-                           COUNT(c.id) FILTER (WHERE c.result = '5' AND c.is_test = FALSE AND c.is_excluded = FALSE) as callback,
-                           COUNT(c.id) FILTER (WHERE c.is_test = FALSE AND c.is_excluded = FALSE) as contacted
+                           COUNT(c.id) FILTER (WHERE c.result IS NOT NULL AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as total,
+                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok') AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as done,
+                           COUNT(c.id) FILTER (WHERE c.result = '5' AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as callback,
+                           COUNT(c.id) FILTER (WHERE c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as contacted
                     FROM users u
                     JOIN masters m ON m.user_id = u.id
                     LEFT JOIN clients c ON c.master_id = m.id
                     WHERE u.role = 'master' AND u.active = TRUE AND u.is_test = FALSE
                     GROUP BY u.id, m.id, u.name
                     ORDER BY done DESC, total DESC
-                """)
+                """.format(mf=month_filter))
                 rows = cur.fetchall()
                 stats = []
                 for r in rows:

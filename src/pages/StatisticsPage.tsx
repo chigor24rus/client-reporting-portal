@@ -38,12 +38,13 @@ export default function StatisticsPage() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [selectedCallsMonth, setSelectedCallsMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [selectedMastersMonth, setSelectedMastersMonth] = useState('');
 
   useEffect(() => {
     apiGetPendingCount().then(({ status, data }) => {
       if (status === 200) setPendingCount((data as { pending: number }).pending);
     });
-    apiGetMastersStats().then(({ status, data }) => {
+    apiGetMastersStats(selectedMastersMonth || undefined).then(({ status, data }) => {
       if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
     });
     apiGetCallsStats().then(({ status, data }) => {
@@ -60,6 +61,12 @@ export default function StatisticsPage() {
       if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
     });
   }, [selectedMonth]);
+
+  useEffect(() => {
+    apiGetMastersStats(selectedMastersMonth || undefined).then(({ status, data }) => {
+      if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
+    });
+  }, [selectedMastersMonth]);
 
   useEffect(() => {
     if (!selectedCallsMonth) return;
@@ -217,7 +224,19 @@ export default function StatisticsPage() {
       </div>
 
       <div className="metric-card">
-        <p className="text-sm font-semibold text-foreground mb-4">Показатели мастеров</p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold text-foreground">Показатели мастеров</p>
+          <select
+            value={selectedMastersMonth}
+            onChange={e => setSelectedMastersMonth(e.target.value)}
+            className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Все время</option>
+            {monthOptions.map(o => (
+              <option key={o.val} value={o.val}>{o.label}</option>
+            ))}
+          </select>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full data-table">
             <thead>
