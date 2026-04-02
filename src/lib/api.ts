@@ -110,6 +110,10 @@ export async function apiGetDailyStats(month?: string) {
   return request('clients', `/?daily_stats=true${month ? `&month=${month}` : ''}`);
 }
 
+export async function apiGetResultsStats(month?: string) {
+  return request('clients', `/?results_stats=true${month ? `&month=${month}` : ''}`);
+}
+
 export async function apiResetClient(id: string) {
   return request('clients', `/?id=${id}&action=reset`, { method: 'POST', body: JSON.stringify({}) });
 }

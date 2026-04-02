@@ -186,6 +186,47 @@ def handler(event: dict, context) -> dict:
                 row = cur.fetchone()
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'pending': int(row['cnt'] or 0)}, ensure_ascii=False)}
 
+            # ─── Статистика результатов и типов работ за месяц ─────────────
+            if qs.get('results_stats') == 'true':
+                month_param = qs.get('month', '')
+                month_filter_sql = ''
+                if month_param:
+                    try:
+                        from datetime import datetime as dt
+                        ms = dt.strptime(month_param, '%Y-%m').date().replace(day=1)
+                        if ms.month == 12:
+                            me = ms.replace(year=ms.year + 1, month=1, day=1)
+                        else:
+                            me = ms.replace(month=ms.month + 1, day=1)
+                        month_filter_sql = "AND updated_at >= '{0}' AND updated_at < '{1}'".format(ms, me)
+                    except ValueError:
+                        pass
+                cur.execute("""
+                    SELECT result, work, COUNT(*) as cnt
+                    FROM clients
+                    WHERE is_test = FALSE AND is_excluded = FALSE
+                      AND result IS NOT NULL
+                      {mf}
+                    GROUP BY result, work
+                """.format(mf=month_filter_sql))
+                rows = cur.fetchall()
+                by_result: dict = {}
+                by_work: dict = {}
+                for r in rows:
+                    res = r['result']
+                    work = r['work']
+                    cnt = r['cnt']
+                    by_result[res] = by_result.get(res, 0) + cnt
+                    if work not in by_work:
+                        by_work[work] = {'total': 0, 'done': 0}
+                    by_work[work]['total'] += cnt
+                    if res in ('1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok'):
+                        by_work[work]['done'] += cnt
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+                    'byResult': by_result,
+                    'byWork': by_work,
+                }, ensure_ascii=False)}
+
             # ─── Статистика мастеров (для виджета на дашборде) ──────────────
             if qs.get('masters_stats') == 'true':
                 month_param = qs.get('month', '')

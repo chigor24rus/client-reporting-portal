@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats, apiGetResultsStats } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -36,6 +36,7 @@ export default function StatisticsPage() {
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
   const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
   const [callsMonths, setCallsMonths] = useState<string[]>([]);
+  const [resultsStats, setResultsStats] = useState<{ byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> } | null>(null);
 
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -71,6 +72,9 @@ export default function StatisticsPage() {
     apiGetDailyStats(globalMonth || currentMonth).then(({ status, data }) => {
       if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
     });
+    apiGetResultsStats(globalMonth || undefined).then(({ status, data }) => {
+      if (status === 200) setResultsStats(data as { byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> });
+    });
     if (globalMonth) {
       apiGetCallsStats(globalMonth).then(({ status, data }) => {
         if (status === 200) setCallsStats((data as { stats: CallsStat[]; months: string[] }).stats);
@@ -89,18 +93,6 @@ export default function StatisticsPage() {
     const pending = all.filter(c => c.result === null).length;
     const excluded = clients.filter(c => c.isExcluded && !c.isTest).length;
 
-    const byResult = CALL_RESULTS.map(r => ({
-      name: r.label,
-      value: all.filter(c => c.result === r.value).length,
-      color: RESULT_COLORS[r.value] || 'hsl(215 12% 52%)',
-    })).filter(r => r.value > 0);
-
-    const byWork = Object.entries(WORK_INTERVALS).map(([work, meta]) => ({
-      name: meta.label,
-      total: all.filter(c => c.work === work).length,
-      done: all.filter(c => c.work === work && c.result !== null && SUCCESS_RESULTS.has(c.result)).length,
-    }));
-
     const today = new Date();
     const birthdays = all.filter(c => {
       if (!c.birthDate) return false;
@@ -112,8 +104,26 @@ export default function StatisticsPage() {
       return diff <= 7;
     }).length;
 
-    return { total, done, booked, pending, excluded, byResult, byWork, birthdays };
+    return { total, done, booked, pending, excluded, birthdays };
   }, [clients, apiUsers]);
+
+  const byResult = useMemo(() => {
+    if (!resultsStats) return [];
+    return CALL_RESULTS.map(r => ({
+      name: r.label,
+      value: resultsStats.byResult[r.value] ?? 0,
+      color: RESULT_COLORS[r.value] || 'hsl(215 12% 52%)',
+    })).filter(r => r.value > 0);
+  }, [resultsStats]);
+
+  const byWork = useMemo(() => {
+    if (!resultsStats) return [];
+    return Object.entries(WORK_INTERVALS).map(([work, meta]) => ({
+      name: meta.label,
+      total: resultsStats.byWork[work]?.total ?? 0,
+      done: resultsStats.byWork[work]?.done ?? 0,
+    }));
+  }, [resultsStats]);
 
   const byMaster = useMemo(() => {
     return mastersStats.map(m => ({
@@ -186,12 +196,12 @@ export default function StatisticsPage() {
       <div className="grid grid-cols-2 gap-4">
         <div className="metric-card">
           <p className="text-sm font-semibold text-foreground mb-4">Распределение по результатам</p>
-          {summary.byResult.length > 0 ? (
+          {byResult.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={summary.byResult} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
-                    {summary.byResult.map((entry, i) => (
+                  <Pie data={byResult} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
+                    {byResult.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -203,7 +213,7 @@ export default function StatisticsPage() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1 mt-2">
-                {summary.byResult.map((r, i) => (
+                {byResult.map((r, i) => (
                   <div key={i} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }} />
@@ -224,7 +234,7 @@ export default function StatisticsPage() {
         <div className="metric-card">
           <p className="text-sm font-semibold text-foreground mb-4">По типам работ</p>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={summary.byWork} layout="vertical">
+            <BarChart data={byWork} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
               <XAxis type="number" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis dataKey="name" type="category" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} width={90} />
