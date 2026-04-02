@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import Icon from '@/components/ui/icon';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { CALL_RESULTS } from '@/data/mockData';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
-type MasterStat = { userId: string; name: string; total: number; done: number; contacted: number; rate: number };
+type MasterStat = { userId: string; name: string; total: number; done: number; contacted: number; rate: number; callback?: number };
 type PersonalStat = { result: string; label: string; count: number; color: string };
 
 type Props = {
@@ -13,31 +12,13 @@ type Props = {
   birthdayCount: number;
   currentUserId?: string;
   mastersStats: MasterStat[];
+  myStat?: MasterStat;
   personalMonthStats: PersonalStat[];
   personalQuarterStats: { name: string; done: number; pending: number }[];
 };
 
-const RESULT_COLORS: Record<string, string> = {
-  '1': 'hsl(142 72% 42%)',
-  '2_oil': 'hsl(200 80% 48%)',
-  '2_brake': 'hsl(200 80% 55%)',
-  '2_gearbox': 'hsl(200 80% 62%)',
-  '2_coolant': 'hsl(200 80% 68%)',
-  '3': 'hsl(0 70% 50%)',
-  '4': 'hsl(0 70% 40%)',
-  '5': 'hsl(38 92% 52%)',
-  '6': 'hsl(38 80% 60%)',
-  '9': 'hsl(142 50% 55%)',
-  '7': 'hsl(215 12% 52%)',
-  '8': 'hsl(215 12% 38%)',
-  'gift_ok': 'hsl(320 70% 50%)',
-  'gift_no': 'hsl(320 50% 40%)',
-};
 
-const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
-
-export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, personalMonthStats, personalQuarterStats }: Props) {
-  const [leftPeriod, setLeftPeriod] = useState<'month' | 'quarter'>('month');
+export default function DashboardStats({ pending, done, total, birthdayCount, currentUserId, mastersStats, myStat, personalMonthStats: _personalMonthStats, personalQuarterStats: _personalQuarterStats }: Props) {
   const [rightPeriod, setRightPeriod] = useState<'month' | 'quarter'>('month');
 
   const monthMasters = mastersStats;
@@ -47,10 +28,12 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
 
   const teamTotal = mastersStats.reduce((s, m) => s + m.total, 0);
   const teamDone = mastersStats.reduce((s, m) => s + m.done, 0);
-  const teamContacted = mastersStats.reduce((s, m) => s + (m.contacted ?? 0), 0);
 
-  const successCount = personalMonthStats.filter(s => SUCCESS_RESULTS.has(s.result)).reduce((s, x) => s + x.count, 0);
-  const totalProcessed = personalMonthStats.reduce((s, x) => s + x.count, 0);
+  // Личная статистика — берём из myStat (данные с сервера)
+  const myTotal = myStat?.total ?? 0;
+  const myDone = myStat?.done ?? 0;
+  const myCallback = myStat?.callback ?? 0;
+  const myRate = myTotal ? Math.round((myDone / myTotal) * 100) : 0;
 
   return (
     <>
@@ -111,87 +94,50 @@ export default function DashboardStats({ pending, done, total, birthdayCount, cu
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Левый блок — персональная динамика */}
+        {/* Левый блок — персональная статистика */}
         <div className="metric-card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Моя статистика</p>
-              <p className="text-xs text-muted-foreground">
-                {leftPeriod === 'month' ? 'За текущий месяц' : 'За текущий квартал'}
-              </p>
-            </div>
-            <div className="flex gap-1 bg-secondary rounded-lg p-1">
-              {(['month', 'quarter'] as const).map(p => (
-                <button key={p} onClick={() => setLeftPeriod(p)}
-                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${leftPeriod === p ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {p === 'month' ? 'Месяц' : 'Квартал'}
-                </button>
-              ))}
-            </div>
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-foreground">Моя статистика</p>
+            <p className="text-xs text-muted-foreground">За всё время работы</p>
           </div>
 
-          {leftPeriod === 'month' ? (
-            personalMonthStats.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex gap-4 items-center">
-                  <ResponsiveContainer width={140} height={140}>
-                    <PieChart>
-                      <Pie data={personalMonthStats} cx="50%" cy="50%" innerRadius={38} outerRadius={60} paddingAngle={2} dataKey="count">
-                        {personalMonthStats.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 11 }}
-                        formatter={(value: number, name: string) => [value, name]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex-1 space-y-1.5">
-                    {personalMonthStats.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                          <span className="text-muted-foreground truncate max-w-[120px]">{s.label}</span>
-                        </div>
-                        <span className="font-semibold text-foreground ml-2">{s.count}</span>
-                      </div>
-                    ))}
-                  </div>
+          {myTotal > 0 ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-secondary/50 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-foreground">{myTotal}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Обработано</p>
                 </div>
-                <div className="pt-3 border-t border-border grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-base font-bold text-foreground">{totalProcessed}</p>
-                    <p className="text-xs text-muted-foreground">Клиентов</p>
-                  </div>
-                  <div>
-                    <p className="text-base font-bold text-success">{successCount}</p>
-                    <p className="text-xs text-muted-foreground">Записано</p>
-                  </div>
-                  <div>
-                    <p className="text-base font-bold text-primary">{totalProcessed ? Math.round((successCount / totalProcessed) * 100) : 0}%</p>
-                    <p className="text-xs text-muted-foreground">Конверсия</p>
-                  </div>
+                <div className="bg-success/10 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-success">{myDone}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Записано</p>
                 </div>
-
+                <div className="bg-warning/10 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-warning">{myCallback}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Повт. созвон</p>
+                </div>
               </div>
-            ) : (
-              <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет обработанных клиентов</div>
-            )
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                  <span>Конверсия</span>
+                  <span className={`font-semibold ${myRate >= 70 ? 'text-success' : myRate >= 40 ? 'text-warning' : 'text-destructive'}`}>{myRate}%</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${myRate}%`,
+                      background: myRate >= 70 ? 'hsl(142 72% 42%)' : myRate >= 40 ? 'hsl(38 92% 52%)' : 'hsl(0 70% 50%)',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           ) : (
-            personalQuarterStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={personalQuarterStats}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
-                  <XAxis dataKey="name" tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'hsl(215 12% 52%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: 'hsl(220 14% 11%)', border: '1px solid hsl(220 12% 18%)', borderRadius: '8px', fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="done" name="Обработано" fill="hsl(142 72% 42%)" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="pending" name="Ожидают" fill="hsl(38 92% 52%)" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Нет данных</div>
-            )
+            <div className="h-40 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Icon name="PhoneCall" size={32} className="opacity-20" />
+              <p className="text-sm">Нет обработанных клиентов</p>
+            </div>
           )}
         </div>
 

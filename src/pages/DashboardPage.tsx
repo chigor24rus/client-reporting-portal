@@ -6,19 +6,11 @@ import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
 import { apiSearchClients, apiGetMastersStats } from '@/lib/api';
-import { CALL_RESULTS } from '@/data/mockData';
 
-type MasterStat = { userId: string; name: string; total: number; done: number; rate: number };
-
-const RESULT_COLORS: Record<string, string> = {
-  '1': 'hsl(142 72% 42%)', '2_oil': 'hsl(200 80% 48%)', '2_brake': 'hsl(200 80% 55%)',
-  '2_gearbox': 'hsl(200 80% 62%)', '2_coolant': 'hsl(200 80% 68%)', '3': 'hsl(0 70% 50%)',
-  '4': 'hsl(0 70% 40%)', '5': 'hsl(38 92% 52%)', '6': 'hsl(38 80% 60%)',
-  '9': 'hsl(142 50% 55%)', '7': 'hsl(215 12% 52%)', '8': 'hsl(215 12% 38%)',
-};
+type MasterStat = { userId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
 
 export default function DashboardPage() {
-  const { clientCards, clients, apiUsers, syncClientResult, loadingClients, user } = useApp();
+  const { clientCards, syncClientResult, loadingClients, user } = useApp();
   const [filter, setFilter] = useState<'all' | 'pending' | 'done' | 'birthday' | 'search'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ClientCard[]>([]);
@@ -42,8 +34,6 @@ export default function DashboardPage() {
     return result;
   }, [syncClientResult, refreshMastersStats]);
 
-  const masters = apiUsers.filter(u => u.role === 'master' && u.active);
-
   const birthdayCount = useMemo(() => clientCards.filter(c => c.isBirthday).length, [clientCards]);
 
   const filtered = useMemo(() => {
@@ -56,50 +46,10 @@ export default function DashboardPage() {
   const pending = clientCards.filter(c => c.status !== 'done').length;
   const myStat = mastersStats.find(m => String(m.userId) === String(user?.id));
   const done = mastersStats.reduce((sum, m) => sum + m.done, 0);
-  const total = myStat?.total ?? clientCards.filter(c => !c.isDeferred).length;
+  const total = clientCards.filter(c => !c.isDeferred).length;
 
-  const masterStats = useMemo(() => {
-    return masters.map(m => {
-      const mClients = clients.filter(c => c.masterId === m.masterId && !c.isExcluded);
-      const mDone = mClients.filter(c => c.status === 'done').length;
-      return {
-        name: m.name.split(' ')[0] + ' ' + (m.name.split(' ')[1]?.[0] || '') + '.',
-        total: mClients.length,
-        done: mDone,
-        rate: mClients.length ? Math.round((mDone / mClients.length) * 100) : 0,
-      };
-    });
-  }, [masters, clients]);
-
-  // Персональная статистика мастера
-  const now = new Date();
-  const personalMonthStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    clientCards.flatMap(c => c.works).forEach(w => {
-      if (w.result) counts[w.result] = (counts[w.result] || 0) + 1;
-    });
-    return Object.entries(counts).map(([val, count]) => {
-      const r = CALL_RESULTS.find(r => r.value === val);
-      return { result: val, label: r?.label || val, count, color: RESULT_COLORS[val] || 'hsl(215 12% 52%)' };
-    }).filter(s => s.count > 0).sort((a, b) => b.count - a.count);
-  }, [clientCards]);
-
-  const personalQuarterStats = useMemo(() => {
-    const months = [];
-    for (let i = 2; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const name = d.toLocaleDateString('ru-RU', { month: 'long' });
-      months.push({ name: name.charAt(0).toUpperCase() + name.slice(1), done: 0, pending: 0 });
-    }
-    // Пока данных по датам нет — показываем текущие итоги в последнем месяце
-    const totalDone = clientCards.flatMap(c => c.works).filter(w => w.status === 'done').length;
-    const totalPending = clientCards.flatMap(c => c.works).filter(w => w.status === 'pending' && !w.isUpcoming).length;
-    if (months.length > 0) {
-      months[months.length - 1].done = totalDone;
-      months[months.length - 1].pending = totalPending;
-    }
-    return months;
-  }, [clientCards]);
+  const personalMonthStats = useMemo(() => [] as { result: string; label: string; count: number; color: string }[], []);
+  const personalQuarterStats = useMemo(() => [] as { name: string; done: number; pending: number }[], []);
 
   const handleSearch = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
@@ -134,6 +84,7 @@ export default function DashboardPage() {
         birthdayCount={birthdayCount}
         currentUserId={user?.id}
         mastersStats={mastersStats}
+        myStat={myStat}
         personalMonthStats={personalMonthStats}
         personalQuarterStats={personalQuarterStats}
       />
