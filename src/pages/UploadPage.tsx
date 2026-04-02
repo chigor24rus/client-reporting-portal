@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Icon from '@/components/ui/icon';
-import { apiUploadTxt } from '@/lib/api';
+import { apiUploadTxt, apiUploadCallsReport } from '@/lib/api';
+import { useApp } from '@/context/AppContext';
 
 type UploadStatus = 'idle' | 'dragging' | 'processing' | 'done' | 'error';
 
@@ -16,9 +17,16 @@ interface FileResult {
 }
 
 export default function UploadPage() {
+  const { user } = useApp();
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [files, setFiles] = useState<File[]>([]);
   const [results, setResults] = useState<FileResult[]>([]);
+
+  // Calls report section
+  const [callsFile, setCallsFile] = useState<File | null>(null);
+  const [callsStatus, setCallsStatus] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
+  const [callsResult, setCallsResult] = useState<{ period: string; stats: { master: string; incoming: number; outgoing: number }[] } | null>(null);
+  const [callsError, setCallsError] = useState('');
 
   function filterTxt(list: File[]) {
     return list.filter(f => f.name.endsWith('.txt'));
@@ -89,6 +97,35 @@ export default function UploadPage() {
 
     const hasError = fileResults.some(r => r.error);
     setStatus(hasError ? 'error' : 'done');
+  }
+
+  async function handleCallsUpload() {
+    if (!callsFile) return;
+    setCallsStatus('processing');
+    setCallsResult(null);
+    setCallsError('');
+
+    const reader = new FileReader();
+    const content: string = await new Promise(resolve => {
+      reader.onload = () => {
+        const arr = new Uint8Array(reader.result as ArrayBuffer);
+        let binary = '';
+        arr.forEach(b => { binary += String.fromCharCode(b); });
+        resolve(btoa(binary));
+      };
+      reader.readAsArrayBuffer(callsFile);
+    });
+
+    const { status: httpStatus, data } = await apiUploadCallsReport(String(user?.id || ''), content);
+    const d = data as Record<string, unknown>;
+
+    if (httpStatus === 200 && d.ok) {
+      setCallsResult(d as { period: string; stats: { master: string; incoming: number; outgoing: number }[] });
+      setCallsStatus('done');
+    } else {
+      setCallsError((d.error as string) || 'Неизвестная ошибка');
+      setCallsStatus('error');
+    }
   }
 
   const totalAdded = results.reduce((s, r) => s + r.added, 0);
@@ -221,6 +258,70 @@ export default function UploadPage() {
           })()}
         </div>
       )}
+
+      {/* Calls Report Section */}
+      <div className="border-t border-border pt-6 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Отчёт по звонкам</h2>
+          <p className="text-sm text-muted-foreground">Загрузите отчёт из 1С по звонкам — данные обновятся в статистике мастеров</p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <label className="flex-1 flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-all">
+            <Icon name="Phone" size={18} className="text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">
+                {callsFile ? callsFile.name : 'Выберите файл отчёта звонков (.txt)'}
+              </p>
+              {callsFile && <p className="text-xs text-muted-foreground">{(callsFile.size / 1024).toFixed(1)} КБ</p>}
+            </div>
+            <input
+              type="file"
+              accept=".txt"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) { setCallsFile(f); setCallsStatus('idle'); setCallsResult(null); setCallsError(''); } e.target.value = ''; }}
+            />
+          </label>
+          <button
+            onClick={handleCallsUpload}
+            disabled={!callsFile || callsStatus === 'processing'}
+            className="px-5 py-3 bg-primary text-primary-foreground font-semibold rounded-xl text-sm hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center gap-2 whitespace-nowrap"
+          >
+            {callsStatus === 'processing' ? (
+              <><Icon name="Loader2" size={16} className="animate-spin" /> Загрузка...</>
+            ) : (
+              <><Icon name="Upload" size={16} /> Загрузить</>
+            )}
+          </button>
+        </div>
+
+        {callsStatus === 'error' && (
+          <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 rounded-lg px-4 py-3">
+            <Icon name="AlertCircle" size={16} />
+            <span>{callsError}</span>
+          </div>
+        )}
+
+        {callsStatus === 'done' && callsResult && (
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2 text-success text-sm font-semibold">
+              <Icon name="CheckCircle2" size={16} />
+              <span>Данные за {callsResult.period} успешно загружены</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {callsResult.stats.map(s => (
+                <div key={s.master} className="bg-secondary rounded-lg px-3 py-2">
+                  <p className="text-xs font-semibold text-foreground truncate">{s.master.split(' ')[0]} {s.master.split(' ')[1]}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Вх: <span className="text-foreground font-medium">{s.incoming}</span>
+                    {' '}• Исх: <span className="text-foreground font-medium">{s.outgoing}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="bg-card border border-border rounded-xl p-4 space-y-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Поддерживаемые форматы</p>

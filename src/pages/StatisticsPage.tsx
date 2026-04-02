@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -32,8 +32,12 @@ export default function StatisticsPage() {
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
+  type CallsStat = { master: string; incoming: number; outgoing: number; month: string };
+  const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
+  const [callsMonths, setCallsMonths] = useState<string[]>([]);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [selectedCallsMonth, setSelectedCallsMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
 
   useEffect(() => {
     apiGetPendingCount().then(({ status, data }) => {
@@ -42,6 +46,13 @@ export default function StatisticsPage() {
     apiGetMastersStats().then(({ status, data }) => {
       if (status === 200) setMastersStats((data as { stats: MasterStat[] }).stats);
     });
+    apiGetCallsStats().then(({ status, data }) => {
+      if (status === 200) {
+        const d = data as { stats: CallsStat[]; months: string[] };
+        setCallsMonths(d.months);
+        if (d.months.length > 0) setSelectedCallsMonth(d.months[0]);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -49,6 +60,13 @@ export default function StatisticsPage() {
       if (status === 200) setDailyStats((data as { stats: DailyStat[] }).stats);
     });
   }, [selectedMonth]);
+
+  useEffect(() => {
+    if (!selectedCallsMonth) return;
+    apiGetCallsStats(selectedCallsMonth).then(({ status, data }) => {
+      if (status === 200) setCallsStats((data as { stats: CallsStat[]; months: string[] }).stats);
+    });
+  }, [selectedCallsMonth]);
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -243,6 +261,76 @@ export default function StatisticsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="metric-card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
+            <p className="text-xs text-muted-foreground">Уникальные звонки по документам из 1С</p>
+          </div>
+          {callsMonths.length > 0 && (
+            <select
+              value={selectedCallsMonth}
+              onChange={e => setSelectedCallsMonth(e.target.value)}
+              className="bg-secondary border border-border text-foreground text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {callsMonths.map(m => {
+                const [y, mo] = m.split('-');
+                const d = new Date(Number(y), Number(mo) - 1, 1);
+                const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+                return <option key={m} value={m}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
+              })}
+            </select>
+          )}
+        </div>
+        {callsMonths.length === 0 ? (
+          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
+            <Icon name="PhoneOff" size={18} />
+            <span>Нет данных. Загрузите отчёт по звонкам из 1С в разделе «Загрузка»</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full data-table">
+              <thead>
+                <tr>
+                  <th>Мастер</th>
+                  <th className="text-center">Входящие</th>
+                  <th className="text-center">Исходящие</th>
+                  <th className="text-center">Всего</th>
+                </tr>
+              </thead>
+              <tbody>
+                {callsStats.map((s, i) => (
+                  <tr key={i}>
+                    <td className="text-foreground font-medium">{s.master}</td>
+                    <td className="text-center">
+                      <span className="inline-flex items-center gap-1 text-info font-semibold">
+                        <Icon name="PhoneIncoming" size={13} />
+                        {s.incoming}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <span className="inline-flex items-center gap-1 text-primary font-semibold">
+                        <Icon name="PhoneOutgoing" size={13} />
+                        {s.outgoing}
+                      </span>
+                    </td>
+                    <td className="text-center font-bold text-foreground">{s.incoming + s.outgoing}</td>
+                  </tr>
+                ))}
+                {callsStats.length > 0 && (
+                  <tr className="border-t border-border">
+                    <td className="font-semibold text-foreground">Итого</td>
+                    <td className="text-center font-semibold text-info">{callsStats.reduce((s, r) => s + r.incoming, 0)}</td>
+                    <td className="text-center font-semibold text-primary">{callsStats.reduce((s, r) => s + r.outgoing, 0)}</td>
+                    <td className="text-center font-bold text-foreground">{callsStats.reduce((s, r) => s + r.incoming + r.outgoing, 0)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {(() => {

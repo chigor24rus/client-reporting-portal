@@ -130,4 +130,17 @@ export async function apiUpdateClient(id: string, payload: {
   return request('clients', `/?id=${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
+// Calls report
+export async function apiUploadCallsReport(userId: string, file: string) {
+  return request('parse-calls', '/', {
+    method: 'POST',
+    body: JSON.stringify({ userId, file }),
+  });
+}
+
+export async function apiGetCallsStats(month?: string) {
+  const qs = month ? `?month=${month}` : '';
+  return request('calls-stats', `/${qs}`);
+}
+
 export { getToken };
