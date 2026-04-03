@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
+import { CALL_RESULTS, WORK_INTERVALS, WORK_RESULT_MAP } from '@/data/mockData';
 import { apiResetClient } from '@/lib/api';
 
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
@@ -57,13 +57,31 @@ function getClientVisibility(workDate: string, work: string, status: string, isE
   };
 }
 
+function getAdminWorkResults(workType: string) {
+  const thisWorkValue = WORK_RESULT_MAP[workType];
+  const allWorkValues = new Set(Object.values(WORK_RESULT_MAP));
+  return CALL_RESULTS.filter(r => {
+    if (r.group === 'birthday') return false;
+    if (r.value === '1') return false;
+    if (r.group === 'work' && allWorkValues.has(r.value)) {
+      return r.value === thisWorkValue;
+    }
+    return true;
+  });
+}
+
 export default function ReportsPage() {
-  const { clients, apiUsers, refreshClients } = useApp();
+  const { clients, apiUsers, refreshClients, syncClientResult } = useApp();
   const [tab, setTab] = useState<ReportTab>('followup');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [resetting, setResetting] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editResult, setEditResult] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editCallback, setEditCallback] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleReset = useCallback(async (id: string) => {
     setResetting(id);
@@ -71,6 +89,25 @@ export default function ReportsPage() {
     await refreshClients();
     setResetting(null);
   }, [refreshClients]);
+
+  const handleExpandRow = useCallback((id: string, currentResult: string | null) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+    } else {
+      setExpandedId(id);
+      setEditResult(currentResult || '');
+      setEditNote('');
+      setEditCallback('');
+    }
+  }, [expandedId]);
+
+  const handleSaveResult = useCallback(async (id: string) => {
+    setSaving(true);
+    await syncClientResult(id, editResult, editNote, editCallback);
+    await refreshClients();
+    setSaving(false);
+    setExpandedId(null);
+  }, [syncClientResult, refreshClients, editResult, editNote, editCallback]);
 
   const followup = useMemo(() =>
     clients.filter(c => {
@@ -272,49 +309,136 @@ export default function ReportsPage() {
                 <tbody>
                   {searchResults.map(c => {
                     const vis = getClientVisibility(c.workDate, c.work, c.status, c.isExcluded);
+                    const isExpanded = expandedId === c.id;
+                    const needsNote = ['3', '5', '6'].includes(editResult);
+                    const needsCallback = editResult === '5';
+                    const canSave = !!editResult && (!needsNote || !!editNote) && (!needsCallback || !!editCallback);
+                    const workResults = getAdminWorkResults(c.work);
                     return (
-                      <tr key={c.id}>
-                        <td className="text-foreground font-medium">{c.name}</td>
-                        <td className="font-mono text-xs">{c.phone}</td>
-                        <td className="font-mono text-xs">{c.vin}</td>
-                        <td>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
-                            {getWorkLabel(c.work)}
-                          </span>
-                        </td>
-                        <td className="text-xs text-muted-foreground font-mono">
-                          {c.workDate ? new Date(c.workDate).toLocaleDateString('ru-RU') : '—'}
-                        </td>
-                        <td className="text-sm">{getMasterName(c.masterId)}</td>
-                        <td>
-                          <div className="flex flex-col gap-0.5">
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${vis.color}`}>
-                              <Icon name={vis.icon} size={12} fallback="Circle" />
-                              {vis.label}
+                      <>
+                        <tr
+                          key={c.id}
+                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
+                          onClick={() => handleExpandRow(c.id, c.result)}
+                        >
+                          <td className="text-foreground font-medium">{c.name}</td>
+                          <td className="font-mono text-xs">{c.phone}</td>
+                          <td className="font-mono text-xs">{c.vin}</td>
+                          <td>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
+                              {getWorkLabel(c.work)}
                             </span>
-                            {vis.detail && (
-                              <span className="text-xs text-muted-foreground">{vis.detail}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="text-xs text-muted-foreground">{getResultLabel(c.result)}</td>
-                        <td>
-                          {c.result && (
-                            <button
-                              onClick={() => handleReset(c.id)}
-                              disabled={resetting === c.id}
-                              title="Вернуть в работу"
-                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-muted-foreground hover:text-warning hover:border-warning/40 border border-border rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              {resetting === c.id
-                                ? <Icon name="Loader2" size={12} className="animate-spin" />
-                                : <Icon name="RotateCcw" size={12} />
-                              }
-                              Вернуть
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="text-xs text-muted-foreground font-mono">
+                            {c.workDate ? new Date(c.workDate).toLocaleDateString('ru-RU') : '—'}
+                          </td>
+                          <td className="text-sm">{getMasterName(c.masterId)}</td>
+                          <td>
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`inline-flex items-center gap-1 text-xs font-medium ${vis.color}`}>
+                                <Icon name={vis.icon} size={12} fallback="Circle" />
+                                {vis.label}
+                              </span>
+                              {vis.detail && (
+                                <span className="text-xs text-muted-foreground">{vis.detail}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="text-xs text-muted-foreground">{getResultLabel(c.result)}</td>
+                          <td onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleExpandRow(c.id, c.result)}
+                                title="Обработать клиента"
+                                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg transition-colors ${isExpanded ? 'text-primary border-primary/40 bg-primary/10' : 'text-muted-foreground hover:text-primary hover:border-primary/40 border-border'}`}
+                              >
+                                <Icon name="PhoneCall" size={12} />
+                                Обработать
+                              </button>
+                              {c.result && (
+                                <button
+                                  onClick={() => handleReset(c.id)}
+                                  disabled={resetting === c.id}
+                                  title="Вернуть в работу"
+                                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-muted-foreground hover:text-warning hover:border-warning/40 border border-border rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  {resetting === c.id
+                                    ? <Icon name="Loader2" size={12} className="animate-spin" />
+                                    : <Icon name="RotateCcw" size={12} />
+                                  }
+                                  Вернуть
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${c.id}_expand`} className="bg-primary/5">
+                            <td colSpan={9} className="p-0">
+                              <div className="px-4 py-3 border-t border-primary/20 space-y-3">
+                                <p className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                  <Icon name="PhoneCall" size={12} />
+                                  Обработка клиента администратором
+                                </p>
+                                <div className="flex flex-wrap gap-3 items-start">
+                                  <div className="flex-1 min-w-[220px]">
+                                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Результат</label>
+                                    <select
+                                      value={editResult}
+                                      onChange={e => setEditResult(e.target.value)}
+                                      className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                      <option value="">— Выберите результат —</option>
+                                      {workResults.map(r => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  {needsNote && (
+                                    <div className="flex-1 min-w-[220px]">
+                                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Комментарий</label>
+                                      <input
+                                        type="text"
+                                        value={editNote}
+                                        onChange={e => setEditNote(e.target.value)}
+                                        placeholder="Укажите причину..."
+                                        className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                      />
+                                    </div>
+                                  )}
+                                  {needsCallback && (
+                                    <div>
+                                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Дата созвона</label>
+                                      <input
+                                        type="date"
+                                        value={editCallback}
+                                        onChange={e => setEditCallback(e.target.value)}
+                                        className="bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="flex items-end gap-2 pt-5">
+                                    <button
+                                      onClick={() => setExpandedId(null)}
+                                      className="px-3 py-2 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors"
+                                    >
+                                      Отмена
+                                    </button>
+                                    <button
+                                      onClick={() => handleSaveResult(c.id)}
+                                      disabled={saving || !canSave}
+                                      className="flex items-center gap-1.5 px-4 py-2 text-xs bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all"
+                                    >
+                                      {saving && <Icon name="Loader2" size={12} className="animate-spin" />}
+                                      Сохранить
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
                 </tbody>
