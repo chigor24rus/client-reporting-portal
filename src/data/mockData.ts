@@ -33,6 +33,7 @@ export const CALL_RESULTS = [
   { value: '5', label: 'Нет возможности (повторный созвон)', group: 'other', needsCallback: true },
   { value: '6', label: 'Выполнил работы в другом сервисе', group: 'other' },
   { value: '9', label: 'Выполнил работы у нас ранее', group: 'other' },
+  { value: '10', label: 'Рекомендованные работы уже выполнил, записан на выполнение других работ', group: 'other' },
   { value: '7', label: 'Нет ответа', group: 'other' },
   { value: '8', label: 'Телефон более не принадлежит клиенту', group: 'other' },
 ];

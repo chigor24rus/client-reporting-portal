@@ -21,6 +21,7 @@ const RESULT_COLORS: Record<string, string> = {
   '5': 'hsl(38 92% 52%)',
   '6': 'hsl(38 80% 60%)',
   '9': 'hsl(142 50% 55%)',
+  '10': 'hsl(142 60% 35%)',
   '7': 'hsl(215 12% 52%)',
   '8': 'hsl(215 12% 38%)',
 };
@@ -85,7 +86,7 @@ export default function StatisticsPage() {
   }, [globalMonth]);
 
   const summary = useMemo(() => {
-    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok']);
+    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok', '10']);
     const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
     const total = all.length;
     const done = all.filter(c => c.result !== null).length;

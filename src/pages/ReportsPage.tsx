@@ -8,7 +8,7 @@ type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
 // 2_* попадают в повторную обработку только если статус pending (частичная запись с датой созвона)
-const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7', '9'];
+const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7', '9', '10'];
 const EXCLUDE_RESULTS = ['3', '4'];
 const UPCOMING_MONTHS = 3;
 

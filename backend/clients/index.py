@@ -119,7 +119,7 @@ def handler(event: dict, context) -> dict:
                            u.id AS user_id,
                            u.name,
                            COUNT(*) AS contacted,
-                           COUNT(*) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok')) AS booked
+                           COUNT(*) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok','10')) AS booked
                     FROM clients c
                     JOIN masters m ON m.id = c.master_id
                     JOIN users u ON u.id = m.user_id
@@ -220,7 +220,7 @@ def handler(event: dict, context) -> dict:
                     if work not in by_work:
                         by_work[work] = {'total': 0, 'done': 0}
                     by_work[work]['total'] += cnt
-                    if res in ('1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok'):
+                    if res in ('1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok', '10'):
                         by_work[work]['done'] += cnt
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
                     'byResult': by_result,
@@ -247,7 +247,7 @@ def handler(event: dict, context) -> dict:
                 cur.execute("""
                     SELECT u.id as user_id, m.id as master_id, u.name,
                            COUNT(c.id) FILTER (WHERE c.result IS NOT NULL AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as total,
-                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok') AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as done,
+                           COUNT(c.id) FILTER (WHERE c.result IN ('1','2_oil','2_brake','2_gearbox','2_coolant','gift_ok','10') AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as done,
                            COUNT(c.id) FILTER (WHERE c.result = '5' AND c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as callback,
                            COUNT(c.id) FILTER (WHERE c.is_test = FALSE AND c.is_excluded = FALSE {mf}) as contacted
                     FROM users u
