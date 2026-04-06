@@ -86,16 +86,22 @@ export default function StatisticsPage() {
   }, [globalMonth]);
 
   const summary = useMemo(() => {
-    const SUCCESS_RESULTS = new Set(['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', 'gift_ok', '10']);
     const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
-    const total = all.length;
-    const done = all.filter(c => c.result !== null).length;
-    const booked = all.filter(c => c.result !== null && SUCCESS_RESULTS.has(c.result)).length;
-    const pending = all.filter(c => c.result === null).length;
-    const excluded = clients.filter(c => c.isExcluded && !c.isTest).length;
+
+    // Уникальные клиенты по телефону
+    const uniqueByPhone = new Map<string, typeof all[0]>();
+    for (const c of all) {
+      if (!uniqueByPhone.has(c.phone)) uniqueByPhone.set(c.phone, c);
+    }
+    const uniqueClients = Array.from(uniqueByPhone.values());
+    const total = uniqueClients.length;
+
+    const excluded = new Set(
+      clients.filter(c => c.isExcluded && !c.isTest).map(c => c.phone)
+    ).size;
 
     const today = new Date();
-    const birthdays = all.filter(c => {
+    const birthdays = uniqueClients.filter(c => {
       if (!c.birthDate) return false;
       const d = new Date(c.birthDate);
       const diff = Math.abs(
@@ -105,8 +111,8 @@ export default function StatisticsPage() {
       return diff <= 7;
     }).length;
 
-    return { total, done, booked, pending, excluded, birthdays };
-  }, [clients, apiUsers]);
+    return { total, excluded, birthdays };
+  }, [clients]);
 
   const byResult = useMemo(() => {
     if (!resultsStats) return [];
@@ -140,7 +146,7 @@ export default function StatisticsPage() {
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
     { label: 'Обработано', value: mastersStats.reduce((s, m) => s + m.total, 0), icon: 'PhoneCall', color: 'text-primary', bg: 'bg-primary/10' },
     { label: 'Записаны', value: mastersStats.reduce((s, m) => s + m.done, 0), icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
-    { label: 'Ожидают', value: pendingCount ?? summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
+    { label: 'Ожидают', value: pendingCount ?? 0, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
     { label: 'В архиве', value: summary.excluded, icon: 'Archive', color: 'text-muted-foreground', bg: 'bg-secondary' },
     { label: 'Именинники', value: summary.birthdays, icon: 'Cake', color: 'text-pink-400', bg: 'bg-pink-500/10' },
   ];
