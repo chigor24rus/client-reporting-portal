@@ -419,15 +419,17 @@ def handler(event: dict, context) -> dict:
                             no_data_rows.append((name, phone, vin, work_type))
 
                 if no_data_rows:
+                    from datetime import date as date_type
+                    today_date = date_type.today()
                     psycopg2.extras.execute_values(
                         cur,
-                        """INSERT INTO clients (name, phone, vin, work, status, is_no_data)
+                        """INSERT INTO clients (name, phone, vin, work, work_date, status, is_no_data)
                            VALUES %s
                            ON CONFLICT (vin, work) WHERE is_no_data = TRUE DO UPDATE SET
                                name = EXCLUDED.name,
                                phone = EXCLUDED.phone,
                                updated_at = NOW()""",
-                        [(r[0], r[1], r[2], r[3], 'pending', True) for r in no_data_rows]
+                        [(r[0], r[1], r[2], r[3], today_date, 'pending', True) for r in no_data_rows]
                     )
 
             conn.commit()
