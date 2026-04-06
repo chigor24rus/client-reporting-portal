@@ -139,7 +139,7 @@ export default function StatisticsPage() {
   const metrics = [
     { label: 'Всего клиентов', value: summary.total, icon: 'Users', color: 'text-info', bg: 'bg-info/10' },
     { label: 'Обработано', value: mastersStats.reduce((s, m) => s + m.total, 0), icon: 'PhoneCall', color: 'text-primary', bg: 'bg-primary/10' },
-    { label: 'Записаны', value: summary.booked, icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
+    { label: 'Записаны', value: mastersStats.reduce((s, m) => s + m.done, 0), icon: 'CheckCircle2', color: 'text-success', bg: 'bg-success/10' },
     { label: 'Ожидают', value: pendingCount ?? summary.pending, icon: 'Clock', color: 'text-warning', bg: 'bg-warning/10' },
     { label: 'В архиве', value: summary.excluded, icon: 'Archive', color: 'text-muted-foreground', bg: 'bg-secondary' },
     { label: 'Именинники', value: summary.birthdays, icon: 'Cake', color: 'text-pink-400', bg: 'bg-pink-500/10' },
