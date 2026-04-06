@@ -12,17 +12,18 @@ export type WorkItem = {
   id: string;
   vin: string;
   work: string;
-  workDate: string;
-  mileage: number;
-  orderNumber: string;
+  workDate: string | null;
+  mileage: number | null;
+  orderNumber: string | null;
   status: 'pending' | 'done';
   result: string | null;
   resultNote: string | null;
   callbackDate: string | null;
   isUpcoming: boolean;
+  isNoData?: boolean;
   urgencySeconds: number;
   ageMonths: number;
-  nextServiceDate: string;
+  nextServiceDate: string | null;
 };
 
 export type ClientCard = {

@@ -48,6 +48,23 @@ function WorkRow({
     setExpanded(false);
   }
 
+  if (work.isNoData && work.status !== 'done' && !expanded) {
+    return (
+      <div
+        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-destructive/5 border border-dashed border-destructive/30 cursor-pointer hover:bg-destructive/10 transition-colors"
+        onClick={() => setExpanded(true)}
+      >
+        <Icon name="AlertCircle" size={14} className="text-destructive flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium text-foreground">{workLabel}</span>
+          <span className="ml-2 text-xs text-muted-foreground font-mono">{work.vin}</span>
+        </div>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex-shrink-0">Нет данных — предложите!</span>
+        <Icon name="ChevronDown" size={14} className="text-muted-foreground flex-shrink-0" />
+      </div>
+    );
+  }
+
   if (work.isUpcoming && work.status !== 'done' && !expanded) {
     return (
       <div
@@ -60,7 +77,7 @@ function WorkRow({
           <span className="ml-2 text-xs text-muted-foreground font-mono">{work.vin}</span>
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Предстоящие</span>
-        <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(work.workDate).toLocaleDateString('ru-RU')}</span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">{work.workDate ? new Date(work.workDate).toLocaleDateString('ru-RU') : ''}</span>
         <Icon name="ChevronDown" size={14} className="text-muted-foreground flex-shrink-0" />
       </div>
     );
@@ -76,14 +93,22 @@ function WorkRow({
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-foreground border border-border w-fit">{workLabel}</span>
           <span className="text-xs font-mono text-muted-foreground truncate">{work.vin}</span>
           <div>
-            <p className="text-xs text-foreground">{new Date(work.workDate).toLocaleDateString('ru-RU')}</p>
-            <p className="text-xs text-muted-foreground">{work.mileage?.toLocaleString()} км</p>
+            {work.isNoData ? (
+              <span className="text-xs text-destructive font-medium">Нет данных</span>
+            ) : (
+              <>
+                <p className="text-xs text-foreground">{work.workDate ? new Date(work.workDate).toLocaleDateString('ru-RU') : '—'}</p>
+                <p className="text-xs text-muted-foreground">{work.mileage?.toLocaleString()} км</p>
+              </>
+            )}
           </div>
           <div>
             {work.result && work.status === 'done' ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20">{resultLabel?.slice(0, 14) || work.result}</span>
             ) : work.result && work.status === 'pending' ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">{resultLabel?.slice(0, 14) || work.result}</span>
+            ) : work.isNoData ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">Предложите!</span>
             ) : (
               <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">Не обработан</span>
             )}
@@ -94,10 +119,17 @@ function WorkRow({
 
       {expanded && (
         <div className="px-3 pb-3 pt-2 border-t border-border space-y-3 animate-fade-in">
-          <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-            <div>Заказ-наряд: <span className="text-foreground font-mono">{work.orderNumber}</span></div>
-            <div>Просрочено: <span className="text-foreground">{Math.max(0, Math.floor(work.ageMonths - (WORK_INTERVALS[work.work]?.min || 0)))} мес.</span></div>
-          </div>
+          {work.isNoData ? (
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-destructive/5 border border-destructive/20">
+              <Icon name="Info" size={14} className="text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">Данные об этой замене отсутствуют в загруженных отчётах. Уточните у клиента и предложите записаться.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+              <div>Заказ-наряд: <span className="text-foreground font-mono">{work.orderNumber}</span></div>
+              <div>Просрочено: <span className="text-foreground">{Math.max(0, Math.floor(work.ageMonths - (WORK_INTERVALS[work.work]?.min || 0)))} мес.</span></div>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Результат обработки</label>
             <select

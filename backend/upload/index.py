@@ -24,6 +24,14 @@ CORS = {
 # Фиктивный VIN для клиентов без авто (из сводного файла)
 NO_VIN = 'NO_VIN'
 
+# Четыре основные работы, по которым проверяем наличие данных
+ALL_WORK_TYPES = [
+    'Масло и масляный фильтр двигателя - замена',
+    'Жидкость тормозная - замена с прокачкой системы',
+    'Масло АКПП - замена частичная',
+    'Жидкость охлаждающая ДВС и HV- замена (100% аппаратная)',
+]
+
 
 def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
@@ -383,6 +391,44 @@ def handler(event: dict, context) -> dict:
                 )
                 added = len(to_upsert)
                 updated = len(to_update_novin)
+
+            # Для каждого VIN из загруженного файла создаём заглушки для отсутствующих работ
+            vins_in_file = list({c['vin'] for c in clients if c['vin'] and c['vin'] != NO_VIN})
+            if vins_in_file:
+                # Получаем все существующие работы по этим VIN (кроме is_no_data-заглушек)
+                cur.execute(
+                    "SELECT vin, work, name, phone FROM clients WHERE vin = ANY(%s) AND is_no_data = FALSE",
+                    (vins_in_file,)
+                )
+                existing_rows = cur.fetchall()
+                existing_works = {}  # vin -> set of works
+                vin_client = {}      # vin -> (name, phone)
+                for row in existing_rows:
+                    v = row['vin']
+                    if v not in existing_works:
+                        existing_works[v] = set()
+                        vin_client[v] = (row['name'], row['phone'])
+                    existing_works[v].add(row['work'])
+
+                no_data_rows = []
+                for vin in vins_in_file:
+                    works_present = existing_works.get(vin, set())
+                    name, phone = vin_client.get(vin, ('', ''))
+                    for work_type in ALL_WORK_TYPES:
+                        if work_type not in works_present:
+                            no_data_rows.append((name, phone, vin, work_type))
+
+                if no_data_rows:
+                    psycopg2.extras.execute_values(
+                        cur,
+                        """INSERT INTO clients (name, phone, vin, work, status, is_no_data)
+                           VALUES %s
+                           ON CONFLICT (vin, work) WHERE is_no_data = TRUE DO UPDATE SET
+                               name = EXCLUDED.name,
+                               phone = EXCLUDED.phone,
+                               updated_at = NOW()""",
+                        [(r[0], r[1], r[2], r[3], 'pending', True) for r in no_data_rows]
+                    )
 
             conn.commit()
             conn.close()

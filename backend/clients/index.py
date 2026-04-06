@@ -547,6 +547,49 @@ def handler(event: dict, context) -> dict:
                 if is_active:
                     groups[phone]['min_urgency'] = min(groups[phone]['min_urgency'], urgency_seconds)
 
+            # Добавляем заглушки «Нет данных» — работы отсутствующие в истории по VIN
+            # Берём только для клиентов у которых уже есть карточка в groups
+            if groups:
+                phones_in_groups = list(groups.keys())
+                vins_in_groups = list({w['vin'] for g in groups.values() for w in g['works'] if w.get('vin')})
+                if vins_in_groups:
+                    cur.execute(
+                        f"""SELECT id, name, phone, vin, work, status, result, result_note, callback_date
+                            FROM clients
+                            WHERE is_no_data = TRUE
+                              AND is_excluded = FALSE
+                              AND status != 'done'
+                              {test_filter}
+                              AND vin = ANY(%s)""",
+                        (vins_in_groups,)
+                    )
+                    no_data_rows_db = cur.fetchall()
+                    for r in no_data_rows_db:
+                        phone = r['phone'] or r['name']
+                        if phone not in groups:
+                            continue
+                        # Не добавляем если такая работа уже есть в группе (реальные данные)
+                        existing_works = {w['work'] for w in groups[phone]['works']}
+                        if r['work'] in existing_works:
+                            continue
+                        groups[phone]['works'].append({
+                            'id': str(r['id']),
+                            'vin': r['vin'],
+                            'work': r['work'],
+                            'workDate': None,
+                            'mileage': None,
+                            'orderNumber': None,
+                            'status': r['status'],
+                            'result': r['result'],
+                            'resultNote': r['result_note'],
+                            'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
+                            'isUpcoming': False,
+                            'isNoData': True,
+                            'urgencySeconds': 0,
+                            'ageMonths': 0,
+                            'nextServiceDate': None,
+                        })
+
             # Помечаем именинников среди клиентов с работами
             for r in birthday_rows:
                 phone = r['phone']
