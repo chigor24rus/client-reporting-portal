@@ -404,11 +404,11 @@ def handler(event: dict, context) -> dict:
                 existing_works = {}  # vin -> set of works
                 vin_client = {}      # vin -> (name, phone)
                 for row in existing_rows:
-                    v = row['vin']
+                    v = row[0]  # vin
                     if v not in existing_works:
                         existing_works[v] = set()
-                        vin_client[v] = (row['name'], row['phone'])
-                    existing_works[v].add(row['work'])
+                        vin_client[v] = (row[2], row[3])  # name, phone
+                    existing_works[v].add(row[1])  # work
 
                 no_data_rows = []
                 for vin in vins_in_file:
