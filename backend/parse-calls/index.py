@@ -1,102 +1,130 @@
 """
-Парсинг и сохранение отчёта звонков из 1С.
-Принимает текстовый файл в base64, парсит, сохраняет по мастерам и месяцу.
+Парсинг CSV-отчёта звонков из IP-телефонии.
+Поля: Date;A;B;CID;Pressed;Queue;Talk-time;Waiting;Transfer;Calltype;Code
+Мастера определяются по внутренним номерам: 101-104.
 """
 import json
 import os
 import base64
-import re
+import csv
+import io
 import psycopg2
-from datetime import datetime
+from datetime import datetime, date
+from collections import defaultdict
 
 
-TRACKED_MASTERS = [
-    "Гармашев Сергей Владимирович",
-    "Пилипенко Александр Петрович",
-    "Седов Федор Иванович",
-    "Завистовский Владимир Андреевич",
-]
+MASTERS = {
+    '101': 'Пилипенко Александр',
+    '102': 'Седов Федор',
+    '103': 'Гармашев Сергей',
+    '104': 'Завистовский Владимир',
+}
+
+INTERNAL_NUMBERS = set(MASTERS.keys())
 
 
-def parse_report(text: str) -> dict:
+def normalize_phone(raw: str) -> str:
+    digits = ''.join(c for c in raw if c.isdigit())
+    if digits.startswith('8') and len(digits) == 11:
+        digits = '7' + digits[1:]
+    return digits
+
+
+def parse_csv(text: str) -> tuple:
     """
-    Парсит текст отчёта 1С по звонкам.
-    Возвращает dict: { master_name: { 'incoming': set(doc_refs), 'outgoing': set(doc_refs) } }
-    и period_month (первый день месяца из дат отчёта).
+    Парсит CSV из IP-телефонии.
+    Возвращает:
+      stats = { ext: { day: { 'out': set(phones), 'out_answered': set(phones), 'in': set(phones), 'missed': set(phones) } } }
+      period_month: date (первый день месяца)
     """
-    lines = text.splitlines()
-    current_master = None
-    current_call_type = None
-    result = {}
+    reader = csv.DictReader(io.StringIO(text), delimiter=';')
+
+    # ext -> day -> { out, out_answered, in, missed_raw }
+    stats = defaultdict(lambda: defaultdict(lambda: {
+        'out': set(),
+        'out_answered': set(),
+        'in': set(),
+        'missed_raw': set(),
+    }))
+
     first_date = None
 
-    date_pattern = re.compile(r'^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2}')
+    for row in reader:
+        calltype = (row.get('Calltype') or '').strip().upper()
+        code = (row.get('Code') or '').strip().upper()
+        a = (row.get('A') or '').strip()
+        b = (row.get('B') or '').strip()
+        date_str = (row.get('Date') or '').strip()
 
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
+        if calltype == 'LOCAL':
             continue
 
-        # Строка с данными звонка (начинается с даты)
-        if date_pattern.match(stripped):
-            parts = [p.strip() for p in stripped.split('\t')]
-            # parts[0] = дата, parts[1] = контрагент (может быть пусто),
-            # parts[2] = телефон, parts[3] = документ, parts[4] = Прослушать, parts[5] = кол-во
-            if len(parts) >= 4:
-                doc_ref = parts[3] if len(parts) > 3 else ''
-                # Извлекаем дату для определения месяца
-                try:
-                    dt = datetime.strptime(parts[0], '%d.%m.%Y %H:%M:%S')
-                    if first_date is None:
-                        first_date = dt
-                except Exception:
-                    pass
-
-                if current_master and current_call_type and doc_ref:
-                    if current_master not in result:
-                        result[current_master] = {'incoming': set(), 'outgoing': set()}
-                    if current_call_type == 'incoming':
-                        result[current_master]['incoming'].add(doc_ref)
-                    elif current_call_type == 'outgoing':
-                        result[current_master]['outgoing'].add(doc_ref)
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+        except Exception:
             continue
 
-        # Определяем тип звонка
-        if stripped.startswith('Входящее'):
-            current_call_type = 'incoming'
-            continue
-        if stripped.startswith('Исходящее'):
-            current_call_type = 'outgoing'
-            continue
+        day = dt.date()
+        if first_date is None:
+            first_date = day
 
-        # Определяем мастера: строка вида "Фамилия Имя Отчество\t103\tAsterisk\t..."
-        # Или просто внутренний телефон без мастера
-        tab_parts = stripped.split('\t')
-        if len(tab_parts) >= 2:
-            candidate = tab_parts[0].strip()
-            # Если первая часть — похоже на ФИО (содержит пробелы, кириллица, не дата)
-            if (candidate and
-                not date_pattern.match(candidate) and
-                re.search(r'[а-яА-ЯёЁ]', candidate) and
-                len(candidate.split()) >= 2 and
-                candidate not in ('Входящее', 'Исходящее', 'Итого', 'Пользователь', 'Тип звонка', 'Дата')):
-                current_master = candidate
-                current_call_type = None
-            elif candidate == '' or (candidate and not re.search(r'[а-яА-ЯёЁ]', candidate)):
-                # Анонимный пользователь (пустое имя или цифры)
-                if len(tab_parts) >= 2 and tab_parts[1].strip().isdigit():
-                    current_master = None
-                    current_call_type = None
+        if calltype == 'OUT':
+            # A = внутренний номер мастера, B = номер клиента
+            ext = a
+            client_raw = b
+            if ext not in INTERNAL_NUMBERS or not client_raw:
+                continue
+            client = normalize_phone(client_raw)
+            if not client:
+                continue
+            stats[ext][day]['out'].add(client)
+            if code == 'ANSWERED':
+                stats[ext][day]['out_answered'].add(client)
+
+        elif calltype == 'IN':
+            # B = внутренний номер мастера (если принял), A = номер клиента
+            ext = b
+            client_raw = a
+            if ext not in INTERNAL_NUMBERS:
+                continue
+            client = normalize_phone(client_raw)
+            if not client:
+                continue
+            if code == 'ANSWERED':
+                stats[ext][day]['in'].add(client)
+            else:
+                stats[ext][day]['missed_raw'].add(client)
 
     period_month = None
     if first_date:
-        period_month = first_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        period_month = first_date.replace(day=1)
 
-    return result, period_month
+    return stats, period_month
+
+
+def aggregate(stats: dict) -> dict:
+    """
+    Агрегирует по мастеру за весь период:
+    - incoming: уникальные входящие (ANSWERED) по дням, суммарно
+    - outgoing: уникальные исходящие по дням (любой код), суммарно
+    - missed: пропущенные без успешного перезвона в тот же день
+    """
+    result = {}
+    for ext, days in stats.items():
+        incoming = 0
+        outgoing = 0
+        missed = 0
+        for day, d in days.items():
+            incoming += len(d['in'])
+            outgoing += len(d['out'])
+            # пропущенные = те кому не перезвонили успешно в тот же день
+            missed += len(d['missed_raw'] - d['out_answered'])
+        result[ext] = {'incoming': incoming, 'outgoing': outgoing, 'missed': missed}
+    return result
 
 
 def handler(event: dict, context) -> dict:
-    """Загрузка и парсинг отчёта звонков из 1С. Только для администраторов."""
+    """Загрузка и парсинг CSV-отчёта звонков из IP-телефонии."""
     cors = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -116,42 +144,45 @@ def handler(event: dict, context) -> dict:
     if not file_b64:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Файл не передан'})}
 
-    # Декодируем файл
     try:
         file_bytes = base64.b64decode(file_b64)
-        # Пробуем UTF-8, потом cp1251
         try:
-            text = file_bytes.decode('utf-8')
+            text = file_bytes.decode('utf-8-sig')
         except Exception:
             text = file_bytes.decode('cp1251')
     except Exception as e:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': f'Ошибка декодирования: {str(e)}'})}
 
-    parsed, period_month = parse_report(text)
+    raw_stats, period_month = parse_csv(text)
 
     if not period_month:
-        return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Не удалось определить период из файла'})}
+        return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Не удалось определить период из файла. Проверьте формат CSV.'})}
+
+    aggregated = aggregate(raw_stats)
 
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
 
     saved = []
-    for master in TRACKED_MASTERS:
-        data = parsed.get(master, {'incoming': set(), 'outgoing': set()})
-        incoming = len(data['incoming'])
-        outgoing = len(data['outgoing'])
-
+    for ext, master_name in MASTERS.items():
+        data = aggregated.get(ext, {'incoming': 0, 'outgoing': 0, 'missed': 0})
         cur.execute("""
-            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, uploaded_by, updated_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, missed_unique, uploaded_by, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (master_name, period_month)
             DO UPDATE SET incoming_unique = EXCLUDED.incoming_unique,
                           outgoing_unique = EXCLUDED.outgoing_unique,
+                          missed_unique = EXCLUDED.missed_unique,
                           uploaded_by = EXCLUDED.uploaded_by,
                           updated_at = NOW()
-        """, (master, period_month.date(), incoming, outgoing, uploaded_by))
+        """, (master_name, period_month, data['incoming'], data['outgoing'], data['missed'], uploaded_by))
 
-        saved.append({'master': master, 'incoming': incoming, 'outgoing': outgoing})
+        saved.append({
+            'master': master_name,
+            'incoming': data['incoming'],
+            'outgoing': data['outgoing'],
+            'missed': data['missed'],
+        })
 
     conn.commit()
     cur.close()
@@ -163,6 +194,6 @@ def handler(event: dict, context) -> dict:
         'body': json.dumps({
             'ok': True,
             'period': period_month.strftime('%Y-%m'),
-            'stats': saved
+            'stats': saved,
         }, ensure_ascii=False)
     }

@@ -33,7 +33,7 @@ def handler(event: dict, context) -> dict:
 
     if month:
         cur.execute("""
-            SELECT master_name, incoming_unique, outgoing_unique,
+            SELECT master_name, incoming_unique, outgoing_unique, missed_unique,
                    TO_CHAR(period_month, 'YYYY-MM') as month
             FROM calls_report
             WHERE TO_CHAR(period_month, 'YYYY-MM') = %s
@@ -41,7 +41,7 @@ def handler(event: dict, context) -> dict:
         """, (month,))
     else:
         cur.execute("""
-            SELECT master_name, incoming_unique, outgoing_unique,
+            SELECT master_name, incoming_unique, outgoing_unique, missed_unique,
                    TO_CHAR(period_month, 'YYYY-MM') as month
             FROM calls_report
             ORDER BY period_month DESC, master_name
@@ -65,7 +65,8 @@ def handler(event: dict, context) -> dict:
             'master': row[0],
             'incoming': row[1],
             'outgoing': row[2],
-            'month': row[3],
+            'missed': row[3],
+            'month': row[4],
         }
         for row in rows
     ]
@@ -75,7 +76,7 @@ def handler(event: dict, context) -> dict:
         existing = {s['master'] for s in stats}
         for master in TRACKED_MASTERS:
             if master not in existing:
-                stats.append({'master': master, 'incoming': 0, 'outgoing': 0, 'month': month})
+                stats.append({'master': master, 'incoming': 0, 'outgoing': 0, 'missed': 0, 'month': month})
         stats.sort(key=lambda x: TRACKED_MASTERS.index(x['master']) if x['master'] in TRACKED_MASTERS else 99)
 
     return {

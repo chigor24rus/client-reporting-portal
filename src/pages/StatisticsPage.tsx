@@ -31,7 +31,7 @@ export default function StatisticsPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
-  type CallsStat = { master: string; incoming: number; outgoing: number; month: string };
+  type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
   type SummaryStats = { total: number; excluded: number; birthdays: number };
 
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
@@ -311,6 +311,7 @@ export default function StatisticsPage() {
                   <th className="text-center">Входящие</th>
                   <th className="text-center">Исходящие</th>
                   <th className="text-center">Всего</th>
+                  <th className="text-center">Пропущенные</th>
                 </tr>
               </thead>
               <tbody>
@@ -330,6 +331,16 @@ export default function StatisticsPage() {
                       </span>
                     </td>
                     <td className="text-center font-bold text-foreground">{s.incoming + s.outgoing}</td>
+                    <td className="text-center">
+                      {s.missed > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-destructive font-semibold">
+                          <Icon name="PhoneMissed" size={13} />
+                          {s.missed}
+                        </span>
+                      ) : (
+                        <span className="text-success font-semibold">0</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 <tr className="border-t border-border">
@@ -337,6 +348,7 @@ export default function StatisticsPage() {
                   <td className="text-center font-semibold text-info">{callsStats.reduce((s, r) => s + r.incoming, 0)}</td>
                   <td className="text-center font-semibold text-primary">{callsStats.reduce((s, r) => s + r.outgoing, 0)}</td>
                   <td className="text-center font-bold text-foreground">{callsStats.reduce((s, r) => s + r.incoming + r.outgoing, 0)}</td>
+                  <td className="text-center font-semibold text-destructive">{callsStats.reduce((s, r) => s + (r.missed || 0), 0)}</td>
                 </tr>
               </tbody>
             </table>
@@ -417,4 +429,3 @@ export default function StatisticsPage() {
     </div>
   );
 }
-

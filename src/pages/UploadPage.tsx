@@ -25,7 +25,7 @@ export default function UploadPage() {
   // Calls report section
   const [callsFile, setCallsFile] = useState<File | null>(null);
   const [callsStatus, setCallsStatus] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
-  const [callsResult, setCallsResult] = useState<{ period: string; stats: { master: string; incoming: number; outgoing: number }[] } | null>(null);
+  const [callsResult, setCallsResult] = useState<{ period: string; stats: { master: string; incoming: number; outgoing: number; missed: number }[] } | null>(null);
   const [callsError, setCallsError] = useState('');
 
   function filterTxt(list: File[]) {
@@ -263,7 +263,7 @@ export default function UploadPage() {
       <div className="border-t border-border pt-6 space-y-4">
         <div>
           <h2 className="text-base font-bold text-foreground">Отчёт по звонкам</h2>
-          <p className="text-sm text-muted-foreground">Загрузите отчёт из 1С по звонкам — данные обновятся в статистике мастеров</p>
+          <p className="text-sm text-muted-foreground">Загрузите CSV-отчёт из IP-телефонии — данные обновятся в статистике мастеров</p>
         </div>
 
         <div className="flex items-center gap-4">
@@ -271,13 +271,13 @@ export default function UploadPage() {
             <Icon name="Phone" size={18} className="text-primary flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground truncate">
-                {callsFile ? callsFile.name : 'Выберите файл отчёта звонков (.txt)'}
+                {callsFile ? callsFile.name : 'Выберите CSV-файл отчёта звонков'}
               </p>
               {callsFile && <p className="text-xs text-muted-foreground">{(callsFile.size / 1024).toFixed(1)} КБ</p>}
             </div>
             <input
               type="file"
-              accept=".txt"
+              accept=".csv"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) { setCallsFile(f); setCallsStatus('idle'); setCallsResult(null); setCallsError(''); } e.target.value = ''; }}
             />
@@ -311,10 +311,11 @@ export default function UploadPage() {
             <div className="grid grid-cols-2 gap-2">
               {callsResult.stats.map(s => (
                 <div key={s.master} className="bg-secondary rounded-lg px-3 py-2">
-                  <p className="text-xs font-semibold text-foreground truncate">{s.master.split(' ')[0]} {s.master.split(' ')[1]}</p>
+                  <p className="text-xs font-semibold text-foreground truncate">{s.master}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Вх: <span className="text-foreground font-medium">{s.incoming}</span>
                     {' '}• Исх: <span className="text-foreground font-medium">{s.outgoing}</span>
+                    {' '}• Проп: <span className="text-destructive font-medium">{s.missed}</span>
                   </p>
                 </div>
               ))}
