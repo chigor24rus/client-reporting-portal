@@ -72,14 +72,6 @@ def parse_csv(text: str) -> tuple:
         if first_date is None:
             first_date = day
 
-        # Коррекция: 03.04.2026 Завистовский работал с номера 103 вместо 104
-        from datetime import date as date_type
-        if day == date_type(2026, 4, 3):
-            if calltype == 'OUT' and a == '103':
-                a = '104'
-            elif calltype == 'IN' and b == '103':
-                b = '104'
-
         if calltype == 'OUT':
             ext = a
             client_raw = b
