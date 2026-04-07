@@ -51,7 +51,7 @@ def handler(event: dict, context) -> dict:
 
     rows = cur.fetchall()
 
-    # Доступные месяцы только из новых CSV-отчётов
+    # Доступные месяцы
     cur.execute("""
         SELECT DISTINCT TO_CHAR(period_month, 'YYYY-MM') as month
         FROM calls_report
@@ -59,6 +59,21 @@ def handler(event: dict, context) -> dict:
         ORDER BY month DESC
     """)
     months = [r[0] for r in cur.fetchall()]
+
+    # Общие пропущенные по компании
+    if month:
+        cur.execute("""
+            SELECT COALESCE(SUM(company_missed), 0)
+            FROM calls_report
+            WHERE TO_CHAR(period_month, 'YYYY-MM') = %s AND incoming_unique >= 0
+        """, (month,))
+    else:
+        cur.execute("""
+            SELECT COALESCE(SUM(company_missed), 0)
+            FROM calls_report
+            WHERE incoming_unique >= 0
+        """)
+    company_missed = int(cur.fetchone()[0])
 
     cur.close()
     conn.close()
@@ -74,7 +89,6 @@ def handler(event: dict, context) -> dict:
         for row in rows
     ]
 
-    # Если запрошен конкретный месяц — дополняем нулями тех мастеров, у кого нет данных
     if month:
         existing = {s['master'] for s in stats}
         for master in TRACKED_MASTERS:
@@ -85,5 +99,5 @@ def handler(event: dict, context) -> dict:
     return {
         'statusCode': 200,
         'headers': cors,
-        'body': json.dumps({'stats': stats, 'months': months}, ensure_ascii=False)
+        'body': json.dumps({'stats': stats, 'months': months, 'company_missed': company_missed}, ensure_ascii=False)
     }

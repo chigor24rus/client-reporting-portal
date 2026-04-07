@@ -32,12 +32,14 @@ export default function StatisticsPage() {
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
   type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
+  type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number };
   type SummaryStats = { total: number; excluded: number; birthdays: number };
 
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
   const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
   const [callsMonths, setCallsMonths] = useState<string[]>([]);
+  const [companyMissed, setCompanyMissed] = useState<number>(0);
   const [resultsStats, setResultsStats] = useState<{ byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> } | null>(null);
   const [summaryStats, setSummaryStats] = useState<SummaryStats | null>(null);
 
@@ -62,7 +64,7 @@ export default function StatisticsPage() {
     });
     apiGetCallsStats().then(({ status, data }) => {
       if (status === 200) {
-        const d = data as { stats: CallsStat[]; months: string[] };
+        const d = data as CallsData;
         setCallsMonths(d.months);
       }
     });
@@ -83,10 +85,15 @@ export default function StatisticsPage() {
     });
     if (globalMonth) {
       apiGetCallsStats(globalMonth).then(({ status, data }) => {
-        if (status === 200) setCallsStats((data as { stats: CallsStat[]; months: string[] }).stats);
+        if (status === 200) {
+          const d = data as CallsData;
+          setCallsStats(d.stats);
+          setCompanyMissed(d.company_missed ?? 0);
+        }
       });
     } else {
       setCallsStats([]);
+      setCompanyMissed(0);
     }
   }, [globalMonth]);
 
@@ -352,6 +359,23 @@ export default function StatisticsPage() {
                 </tr>
               </tbody>
             </table>
+            {companyMissed > 0 && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-xl">
+                <Icon name="PhoneMissed" size={18} className="text-destructive flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Пропущенные по компании: <span className="text-destructive">{companyMissed}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">Входящие на общую линию, которым не перезвонили в тот же день</p>
+                </div>
+              </div>
+            )}
+            {companyMissed === 0 && callsStats.length > 0 && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-success/10 border border-success/20 rounded-xl">
+                <Icon name="PhoneCheck" size={18} className="text-success flex-shrink-0" />
+                <p className="text-sm font-semibold text-success">Все входящие обработаны — пропущенных без перезвона нет</p>
+              </div>
+            )}
           </div>
         )}
       </div>

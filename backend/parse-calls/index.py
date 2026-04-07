@@ -9,7 +9,7 @@ import base64
 import csv
 import io
 import psycopg2
-from datetime import datetime, date
+from datetime import datetime
 from collections import defaultdict
 
 
@@ -34,18 +34,22 @@ def parse_csv(text: str) -> tuple:
     """
     Парсит CSV из IP-телефонии.
     Возвращает:
-      stats = { ext: { day: { 'out': set(phones), 'out_answered': set(phones), 'in': set(phones), 'missed': set(phones) } } }
-      period_month: date (первый день месяца)
+      master_stats = { ext: { day: { out, out_answered, in, missed_raw } } }
+      company_stats = { day: { missed_raw: set, answered_out: set } }
+        — входящие NO ANSWER без привязки к мастеру (B пустое или не внутренний)
+      period_month: date
     """
     reader = csv.DictReader(io.StringIO(text), delimiter=';')
 
-    # ext -> day -> { out, out_answered, in, missed_raw }
-    stats = defaultdict(lambda: defaultdict(lambda: {
+    master_stats = defaultdict(lambda: defaultdict(lambda: {
         'out': set(),
         'out_answered': set(),
         'in': set(),
         'missed_raw': set(),
     }))
+
+    # day -> { missed_raw: set(phones), answered_out: set(phones) }
+    company_stats = defaultdict(lambda: {'missed_raw': set(), 'answered_out': set()})
 
     first_date = None
 
@@ -69,7 +73,6 @@ def parse_csv(text: str) -> tuple:
             first_date = day
 
         if calltype == 'OUT':
-            # A = внутренний номер мастера, B = номер клиента
             ext = a
             client_raw = b
             if ext not in INTERNAL_NUMBERS or not client_raw:
@@ -77,50 +80,57 @@ def parse_csv(text: str) -> tuple:
             client = normalize_phone(client_raw)
             if not client:
                 continue
-            stats[ext][day]['out'].add(client)
+            master_stats[ext][day]['out'].add(client)
             if code == 'ANSWERED':
-                stats[ext][day]['out_answered'].add(client)
+                master_stats[ext][day]['out_answered'].add(client)
+                # Любой успешный исходящий — считаем перезвоном по компании
+                company_stats[day]['answered_out'].add(client)
 
         elif calltype == 'IN':
-            # B = внутренний номер мастера (если принял), A = номер клиента
             ext = b
             client_raw = a
-            if ext not in INTERNAL_NUMBERS:
-                continue
-            client = normalize_phone(client_raw)
-            if not client:
-                continue
-            if code == 'ANSWERED':
-                stats[ext][day]['in'].add(client)
+            if ext in INTERNAL_NUMBERS:
+                # Звонок попал на конкретного мастера
+                client = normalize_phone(client_raw)
+                if not client:
+                    continue
+                if code == 'ANSWERED':
+                    master_stats[ext][day]['in'].add(client)
+                else:
+                    master_stats[ext][day]['missed_raw'].add(client)
             else:
-                stats[ext][day]['missed_raw'].add(client)
+                # Звонок на общую линию (B пустое или общий номер)
+                client = normalize_phone(client_raw)
+                if not client:
+                    continue
+                if code != 'ANSWERED':
+                    company_stats[day]['missed_raw'].add(client)
 
     period_month = None
     if first_date:
         period_month = first_date.replace(day=1)
 
-    return stats, period_month
+    return master_stats, company_stats, period_month
 
 
-def aggregate(stats: dict) -> dict:
-    """
-    Агрегирует по мастеру за весь период:
-    - incoming: уникальные входящие (ANSWERED) по дням, суммарно
-    - outgoing: уникальные исходящие по дням (любой код), суммарно
-    - missed: пропущенные без успешного перезвона в тот же день
-    """
+def aggregate_masters(master_stats: dict) -> dict:
     result = {}
-    for ext, days in stats.items():
-        incoming = 0
-        outgoing = 0
-        missed = 0
+    for ext, days in master_stats.items():
+        incoming = outgoing = missed = 0
         for day, d in days.items():
             incoming += len(d['in'])
             outgoing += len(d['out'])
-            # пропущенные = те кому не перезвонили успешно в тот же день
             missed += len(d['missed_raw'] - d['out_answered'])
         result[ext] = {'incoming': incoming, 'outgoing': outgoing, 'missed': missed}
     return result
+
+
+def aggregate_company(company_stats: dict) -> int:
+    """Пропущенные по компании = номера которым никто не перезвонил за весь день."""
+    total = 0
+    for day, d in company_stats.items():
+        total += len(d['missed_raw'] - d['answered_out'])
+    return total
 
 
 def handler(event: dict, context) -> dict:
@@ -153,12 +163,13 @@ def handler(event: dict, context) -> dict:
     except Exception as e:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': f'Ошибка декодирования: {str(e)}'})}
 
-    raw_stats, period_month = parse_csv(text)
+    master_stats, company_stats, period_month = parse_csv(text)
 
     if not period_month:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Не удалось определить период из файла. Проверьте формат CSV.'})}
 
-    aggregated = aggregate(raw_stats)
+    aggregated = aggregate_masters(master_stats)
+    company_missed = aggregate_company(company_stats)
 
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
@@ -166,16 +177,19 @@ def handler(event: dict, context) -> dict:
     saved = []
     for ext, master_name in MASTERS.items():
         data = aggregated.get(ext, {'incoming': 0, 'outgoing': 0, 'missed': 0})
+        # company_missed сохраняем только в первую запись (Гармашев = 103), остальным 0
+        cm = company_missed if ext == '103' else 0
         cur.execute("""
-            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, missed_unique, uploaded_by, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, missed_unique, company_missed, uploaded_by, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (master_name, period_month)
             DO UPDATE SET incoming_unique = EXCLUDED.incoming_unique,
                           outgoing_unique = EXCLUDED.outgoing_unique,
                           missed_unique = EXCLUDED.missed_unique,
+                          company_missed = EXCLUDED.company_missed,
                           uploaded_by = EXCLUDED.uploaded_by,
                           updated_at = NOW()
-        """, (master_name, period_month, data['incoming'], data['outgoing'], data['missed'], uploaded_by))
+        """, (master_name, period_month, data['incoming'], data['outgoing'], data['missed'], cm, uploaded_by))
 
         saved.append({
             'master': master_name,
@@ -195,5 +209,6 @@ def handler(event: dict, context) -> dict:
             'ok': True,
             'period': period_month.strftime('%Y-%m'),
             'stats': saved,
+            'company_missed': company_missed,
         }, ensure_ascii=False)
     }
