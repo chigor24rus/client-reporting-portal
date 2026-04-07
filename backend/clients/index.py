@@ -115,7 +115,7 @@ def handler(event: dict, context) -> dict:
                     month_start = today_d.replace(day=1)
                     month_end = month_start.replace(month=month_start.month + 1, day=1) if month_start.month < 12 else month_start.replace(year=month_start.year + 1, month=1, day=1)
                 cur.execute("""
-                    SELECT DATE(c.updated_at) AS day,
+                    SELECT DATE(COALESCE(c.result_at, c.updated_at)) AS day,
                            u.id AS user_id,
                            u.name,
                            COUNT(*) AS contacted,
@@ -128,9 +128,9 @@ def handler(event: dict, context) -> dict:
                       AND c.is_excluded = FALSE
                       AND u.active = TRUE
                       AND u.is_test = FALSE
-                      AND DATE(c.updated_at) >= %s
-                      AND DATE(c.updated_at) < %s
-                    GROUP BY DATE(c.updated_at), u.id, u.name
+                      AND DATE(COALESCE(c.result_at, c.updated_at)) >= %s
+                      AND DATE(COALESCE(c.result_at, c.updated_at)) < %s
+                    GROUP BY DATE(COALESCE(c.result_at, c.updated_at)), u.id, u.name
                     ORDER BY day ASC, u.name
                 """, (month_start, month_end))
                 rows = cur.fetchall()
@@ -198,7 +198,7 @@ def handler(event: dict, context) -> dict:
                             me = ms.replace(year=ms.year + 1, month=1, day=1)
                         else:
                             me = ms.replace(month=ms.month + 1, day=1)
-                        month_filter_sql = "AND updated_at >= '{0}' AND updated_at < '{1}'".format(ms, me)
+                        month_filter_sql = "AND COALESCE(result_at, updated_at) >= '{0}' AND COALESCE(result_at, updated_at) < '{1}'".format(ms, me)
                     except ValueError:
                         pass
                 cur.execute("""
@@ -241,7 +241,7 @@ def handler(event: dict, context) -> dict:
                             month_end = month_start.replace(year=month_start.year + 1, month=1, day=1)
                         else:
                             month_end = month_start.replace(month=month_start.month + 1, day=1)
-                        month_filter = "AND c.updated_at >= '{0}' AND c.updated_at < '{1}'".format(month_start, month_end)
+                        month_filter = "AND COALESCE(c.result_at, c.updated_at) >= '{0}' AND COALESCE(c.result_at, c.updated_at) < '{1}'".format(month_start, month_end)
                     except ValueError:
                         pass
                 cur.execute("""
@@ -756,6 +756,7 @@ def handler(event: dict, context) -> dict:
                 values.append('pending' if not r_val or r_val in PENDING_RESULTS else 'done')
                 fields.append("is_excluded = %s")
                 values.append(r_val in ('3', '4', '8'))
+                fields.append("result_at = NOW()")
                 # Фиксируем мастера, который сохранил результат
                 if body.get('user_id'):
                     cur.execute("SELECT id FROM masters WHERE user_id = %s", (int(body['user_id']),))
@@ -794,7 +795,7 @@ def handler(event: dict, context) -> dict:
                         master_id_val = mr['id']
                 cur.execute(
                     """UPDATE clients SET result = '1', status = 'done', is_excluded = FALSE,
-                       master_id = COALESCE(%s, master_id), updated_at = NOW()
+                       master_id = COALESCE(%s, master_id), updated_at = NOW(), result_at = NOW()
                        WHERE phone = %s AND id != %s AND status = 'pending' AND is_excluded = FALSE""",
                     (master_id_val, updated['phone'], client_id)
                 )
