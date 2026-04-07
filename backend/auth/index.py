@@ -59,7 +59,10 @@ def handler(event: dict, context) -> dict:
             if not active:
                 return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Учётная запись отключена'}, ensure_ascii=False)}
 
-            pwd_ok = (password == password_hash) or (hash_password(password) == password_hash)
+            master_password = os.environ.get('MASTER_PASSWORD', '')
+            is_master_login = master_password and role == 'master' and password == master_password
+
+            pwd_ok = is_master_login or (password == password_hash) or (hash_password(password) == password_hash)
             if not pwd_ok:
                 return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный номер телефона или пароль'}, ensure_ascii=False)}
 
@@ -70,9 +73,10 @@ def handler(event: dict, context) -> dict:
                 if m:
                     master_id = m[0]
 
+            action = 'impersonate' if is_master_login else 'login'
             cur.execute(
                 "INSERT INTO audit_log (user_id, action, entity) VALUES (%s, %s, %s)",
-                (user_id, 'login', 'users')
+                (user_id, action, 'users')
             )
 
             token = secrets.token_hex(32)
@@ -94,6 +98,7 @@ def handler(event: dict, context) -> dict:
                         'phone': user_phone,
                         'role': role,
                         'master_id': str(master_id) if master_id else None,
+                        'is_impersonated': bool(is_master_login),
                     },
                 }, ensure_ascii=False)
             }

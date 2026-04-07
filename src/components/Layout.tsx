@@ -54,12 +54,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         <div className="p-3 border-t border-border">
           <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
-            <div className="w-7 h-7 rounded-full bg-secondary border border-border flex items-center justify-center flex-shrink-0">
-              <Icon name="User" size={14} className="text-muted-foreground" />
+            <div className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 ${user?.isImpersonated ? 'bg-warning/20 border-warning' : 'bg-secondary border-border'}`}>
+              <Icon name={user?.isImpersonated ? 'ShieldCheck' : 'User'} size={14} className={user?.isImpersonated ? 'text-warning' : 'text-muted-foreground'} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-foreground truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground">{user?.role === 'admin' ? 'Администратор' : 'Мастер'}</p>
+              <p className={`text-xs ${user?.isImpersonated ? 'text-warning' : 'text-muted-foreground'}`}>
+                {user?.role === 'admin' ? 'Администратор' : user?.isImpersonated ? 'Вход как мастер' : 'Мастер'}
+              </p>
             </div>
           </div>
           <button

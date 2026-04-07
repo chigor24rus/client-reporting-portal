@@ -47,6 +47,7 @@ export type User = {
   role: 'master' | 'admin';
   masterId?: string;
   phone: string;
+  isImpersonated?: boolean;
 };
 
 export type ApiUser = {
@@ -86,13 +87,14 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-function mapApiUser(u: ApiUser): User {
+function mapApiUser(u: ApiUser & { is_impersonated?: boolean }): User {
   return {
     id: u.id,
     name: u.name,
     phone: u.phone,
     role: u.role,
     masterId: u.masterId || undefined,
+    isImpersonated: u.is_impersonated || false,
   };
 }
 
