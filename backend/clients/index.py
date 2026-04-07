@@ -559,7 +559,7 @@ def handler(event: dict, context) -> dict:
                             WHERE is_no_data = TRUE
                               AND is_excluded = FALSE
                               AND status != 'done'
-                              {test_filter}
+                              {test_filter_no_alias}
                               AND vin = ANY(%s)""",
                         (vins_in_groups,)
                     )
