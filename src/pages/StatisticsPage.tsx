@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats, apiGetResultsStats, apiGetSummaryStats } from '@/lib/api';
+import CallsWidget from '@/components/calls/CallsWidget';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -289,84 +290,7 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      <div className="metric-card">
-        <div className="mb-4">
-          <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
-          <p className="text-xs text-muted-foreground">Уникальные звонки по данным IP-телефонии</p>
-        </div>
-        {callsMonths.length === 0 ? (
-          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
-            <Icon name="PhoneOff" size={18} />
-            <span>Нет данных. Загрузите отчёт по звонкам из 1С в разделе «Загрузка»</span>
-          </div>
-        ) : !globalMonth ? (
-          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
-            <Icon name="Calendar" size={18} />
-            <span>Выберите конкретный месяц вверху страницы для просмотра звонков</span>
-          </div>
-        ) : !callsStats.length ? (
-          <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
-            <Icon name="PhoneOff" size={18} />
-            <span>Нет данных по звонкам за {selectedMonthLabel}</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full data-table">
-              <thead>
-                <tr>
-                  <th>Мастер</th>
-                  <th className="text-center">Входящие</th>
-                  <th className="text-center">Исходящие</th>
-                  <th className="text-center">Всего</th>
-                </tr>
-              </thead>
-              <tbody>
-                {callsStats.map((s, i) => (
-                  <tr key={i}>
-                    <td className="text-foreground font-medium">{s.master}</td>
-                    <td className="text-center">
-                      <span className="inline-flex items-center gap-1 text-info font-semibold">
-                        <Icon name="PhoneIncoming" size={13} />
-                        {s.incoming}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      <span className="inline-flex items-center gap-1 text-primary font-semibold">
-                        <Icon name="PhoneOutgoing" size={13} />
-                        {s.outgoing}
-                      </span>
-                    </td>
-                    <td className="text-center font-bold text-foreground">{s.incoming + s.outgoing}</td>
-                  </tr>
-                ))}
-                <tr className="border-t border-border">
-                  <td className="font-semibold text-foreground">Итого</td>
-                  <td className="text-center font-semibold text-info">{callsStats.reduce((s, r) => s + r.incoming, 0)}</td>
-                  <td className="text-center font-semibold text-primary">{callsStats.reduce((s, r) => s + r.outgoing, 0)}</td>
-                  <td className="text-center font-bold text-foreground">{callsStats.reduce((s, r) => s + r.incoming + r.outgoing, 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-            {companyMissed > 0 && (
-              <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-xl">
-                <Icon name="PhoneMissed" size={18} className="text-destructive flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Пропущенные по компании: <span className="text-destructive">{companyMissed}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">Входящие на общую линию, которым не перезвонили в тот же день</p>
-                </div>
-              </div>
-            )}
-            {companyMissed === 0 && callsStats.length > 0 && (
-              <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-success/10 border border-success/20 rounded-xl">
-                <Icon name="PhoneCheck" size={18} className="text-success flex-shrink-0" />
-                <p className="text-sm font-semibold text-success">Все входящие обработаны — пропущенных без перезвона нет</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <CallsWidget month={globalMonth} />
 
       {(() => {
         const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => a.localeCompare(b));

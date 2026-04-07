@@ -60,20 +60,22 @@ def handler(event: dict, context) -> dict:
     """)
     months = [r[0] for r in cur.fetchall()]
 
-    # Общие пропущенные по компании
+    # Общие пропущенные + последняя дата данных
     if month:
         cur.execute("""
-            SELECT COALESCE(SUM(company_missed), 0)
+            SELECT COALESCE(SUM(company_missed), 0), MAX(last_date)
             FROM calls_report
             WHERE TO_CHAR(period_month, 'YYYY-MM') = %s AND incoming_unique >= 0
         """, (month,))
     else:
         cur.execute("""
-            SELECT COALESCE(SUM(company_missed), 0)
+            SELECT COALESCE(SUM(company_missed), 0), MAX(last_date)
             FROM calls_report
             WHERE incoming_unique >= 0
         """)
-    company_missed = int(cur.fetchone()[0])
+    agg = cur.fetchone()
+    company_missed = int(agg[0])
+    last_date = agg[1].strftime('%d.%m.%Y') if agg[1] else None
 
     cur.close()
     conn.close()
@@ -99,5 +101,10 @@ def handler(event: dict, context) -> dict:
     return {
         'statusCode': 200,
         'headers': cors,
-        'body': json.dumps({'stats': stats, 'months': months, 'company_missed': company_missed}, ensure_ascii=False)
+        'body': json.dumps({
+            'stats': stats,
+            'months': months,
+            'company_missed': company_missed,
+            'last_date': last_date,
+        }, ensure_ascii=False)
     }

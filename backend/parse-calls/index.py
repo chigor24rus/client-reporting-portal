@@ -107,10 +107,15 @@ def parse_csv(text: str) -> tuple:
                     company_stats[day]['missed_raw'].add(client)
 
     period_month = None
+    last_date = None
     if first_date:
         period_month = first_date.replace(day=1)
+        all_days = list(company_stats.keys())
+        for ext_days in master_stats.values():
+            all_days.extend(ext_days.keys())
+        last_date = max(all_days) if all_days else first_date
 
-    return master_stats, company_stats, period_month
+    return master_stats, company_stats, period_month, last_date
 
 
 def aggregate_masters(master_stats: dict) -> dict:
@@ -163,7 +168,7 @@ def handler(event: dict, context) -> dict:
     except Exception as e:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': f'Ошибка декодирования: {str(e)}'})}
 
-    master_stats, company_stats, period_month = parse_csv(text)
+    master_stats, company_stats, period_month, last_date = parse_csv(text)
 
     if not period_month:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Не удалось определить период из файла. Проверьте формат CSV.'})}
@@ -177,19 +182,19 @@ def handler(event: dict, context) -> dict:
     saved = []
     for ext, master_name in MASTERS.items():
         data = aggregated.get(ext, {'incoming': 0, 'outgoing': 0, 'missed': 0})
-        # company_missed сохраняем только в первую запись (Гармашев = 103), остальным 0
         cm = company_missed if ext == '103' else 0
         cur.execute("""
-            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, missed_unique, company_missed, uploaded_by, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO calls_report (master_name, period_month, incoming_unique, outgoing_unique, missed_unique, company_missed, last_date, uploaded_by, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (master_name, period_month)
             DO UPDATE SET incoming_unique = EXCLUDED.incoming_unique,
                           outgoing_unique = EXCLUDED.outgoing_unique,
                           missed_unique = EXCLUDED.missed_unique,
                           company_missed = EXCLUDED.company_missed,
+                          last_date = EXCLUDED.last_date,
                           uploaded_by = EXCLUDED.uploaded_by,
                           updated_at = NOW()
-        """, (master_name, period_month, data['incoming'], data['outgoing'], data['missed'], cm, uploaded_by))
+        """, (master_name, period_month, data['incoming'], data['outgoing'], data['missed'], cm, last_date, uploaded_by))
 
         saved.append({
             'master': master_name,

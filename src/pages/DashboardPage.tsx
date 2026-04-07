@@ -6,6 +6,7 @@ import DashboardStats from '@/components/dashboard/DashboardStats';
 import ClientCardRow from '@/components/dashboard/ClientCardRow';
 import ClientBirthdayRow from '@/components/dashboard/ClientBirthdayRow';
 import { apiSearchClients, apiGetMastersStats } from '@/lib/api';
+import CallsWidget from '@/components/calls/CallsWidget';
 
 type MasterStat = { userId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
 
@@ -102,6 +103,8 @@ export default function DashboardPage() {
         onMonthChange={setSelectedMonth}
         monthOptions={monthOptions}
       />
+
+      <CallsWidget month={selectedMonth} />
 
       <div>
         <div className="flex items-center justify-between mb-3">
