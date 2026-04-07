@@ -3,6 +3,7 @@ import {
   apiLogin, apiLogout, apiGetMe,
   apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser,
   apiGetClients, apiLockClient, apiUnlockClient, apiUpdateClient,
+  apiImpersonate,
   getToken,
 } from '@/lib/api';
 import { MOCK_CLIENTS } from '@/data/mockData';
@@ -65,6 +66,7 @@ type AppContextType = {
   user: User | null;
   authLoading: boolean;
   login: (phone: string, password: string) => Promise<string | null>;
+  loginAs: (userId: string, masterPassword: string) => Promise<string | null>;
   logout: () => void;
   clients: Client[];
   clientCards: ClientCard[];
@@ -125,9 +127,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (phone: string, password: string): Promise<string | null> => {
     const { status, data } = await apiLogin(phone, password);
     if (status === 200) {
-      const u = (data as { user: ApiUser }).user;
+      const u = (data as { user: ApiUser & { is_impersonated?: boolean } }).user;
       setUser(mapApiUser(u));
       setCurrentPage(u.role === 'admin' ? 'statistics' : 'dashboard');
+      return null;
+    }
+    return (data as { error: string }).error || 'Ошибка входа';
+  }, []);
+
+  const loginAs = useCallback(async (userId: string, masterPassword: string): Promise<string | null> => {
+    const { status, data } = await apiImpersonate(userId, masterPassword);
+    if (status === 200) {
+      const u = (data as { user: ApiUser & { is_impersonated?: boolean } }).user;
+      setUser(mapApiUser(u));
+      setClients([]);
+      setClientCards([]);
+      setCurrentPage('dashboard');
       return null;
     }
     return (data as { error: string }).error || 'Ошибка входа';
@@ -329,7 +344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      user, authLoading, login, logout,
+      user, authLoading, login, loginAs, logout,
       clients, clientCards, apiUsers, loadingUsers, loadingClients,
       updateClient, lockClient, unlockClient, syncClientResult,
       refreshUsers, createUser, updateUserPassword, removeUser, toggleUserActive,

@@ -34,9 +34,58 @@ def handler(event: dict, context) -> dict:
     cur = conn.cursor()
 
     try:
-        # POST /login
+        # POST — логин или вход как мастер
         if method == 'POST':
             body = json.loads(event.get('body') or '{}')
+            qs_action = (event.get('queryStringParameters') or {}).get('action', '')
+
+            # POST ?action=impersonate — войти в аккаунт мастера (только мастер-паролем)
+            if qs_action == 'impersonate':
+                master_password = os.environ.get('MASTER_PASSWORD', '')
+                provided = (body.get('master_password') or '').strip()
+                target_user_id = body.get('user_id')
+                if not master_password or not provided or provided != master_password:
+                    return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Неверный мастер-пароль'}, ensure_ascii=False)}
+                if not target_user_id:
+                    return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'user_id обязателен'}, ensure_ascii=False)}
+                cur.execute("SELECT id, name, phone, role, active FROM users WHERE id = %s", (target_user_id,))
+                row = cur.fetchone()
+                if not row:
+                    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Пользователь не найден'}, ensure_ascii=False)}
+                user_id, name, user_phone, role, active = row
+                if not active:
+                    return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Учётная запись отключена'}, ensure_ascii=False)}
+                master_id = None
+                if role == 'master':
+                    cur.execute("SELECT id FROM masters WHERE user_id = %s", (user_id,))
+                    m = cur.fetchone()
+                    if m:
+                        master_id = m[0]
+                cur.execute("INSERT INTO audit_log (user_id, action, entity) VALUES (%s, %s, %s)", (user_id, 'impersonate', 'users'))
+                token = secrets.token_hex(32)
+                cur.execute(
+                    """INSERT INTO sessions (token, user_id, user_name, user_phone, role, master_id)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (token, user_id, name, user_phone, role, master_id)
+                )
+                conn.commit()
+                return {
+                    'statusCode': 200,
+                    'headers': CORS,
+                    'body': json.dumps({
+                        'token': token,
+                        'user': {
+                            'id': str(user_id),
+                            'name': name,
+                            'phone': user_phone,
+                            'role': role,
+                            'master_id': str(master_id) if master_id else None,
+                            'is_impersonated': True,
+                        },
+                    }, ensure_ascii=False)
+                }
+
+            # POST /login — обычный вход по телефону и паролю
             phone = (body.get('phone') or '').strip()
             password = (body.get('password') or '').strip()
 
@@ -60,7 +109,7 @@ def handler(event: dict, context) -> dict:
                 return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Учётная запись отключена'}, ensure_ascii=False)}
 
             master_password = os.environ.get('MASTER_PASSWORD', '')
-            is_master_login = master_password and role == 'master' and password == master_password
+            is_master_login = bool(master_password and role == 'master' and password == master_password)
 
             pwd_ok = is_master_login or (password == password_hash) or (hash_password(password) == password_hash)
             if not pwd_ok:
@@ -73,10 +122,10 @@ def handler(event: dict, context) -> dict:
                 if m:
                     master_id = m[0]
 
-            action = 'impersonate' if is_master_login else 'login'
+            log_action = 'impersonate' if is_master_login else 'login'
             cur.execute(
                 "INSERT INTO audit_log (user_id, action, entity) VALUES (%s, %s, %s)",
-                (user_id, action, 'users')
+                (user_id, log_action, 'users')
             )
 
             token = secrets.token_hex(32)
@@ -98,7 +147,7 @@ def handler(event: dict, context) -> dict:
                         'phone': user_phone,
                         'role': role,
                         'master_id': str(master_id) if master_id else None,
-                        'is_impersonated': bool(is_master_login),
+                        'is_impersonated': is_master_login,
                     },
                 }, ensure_ascii=False)
             }

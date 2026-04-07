@@ -55,6 +55,17 @@ export async function apiLogout() {
   removeToken();
 }
 
+export async function apiImpersonate(userId: string, masterPassword: string) {
+  const { status, data } = await request('auth', '/?action=impersonate', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, master_password: masterPassword }),
+  });
+  if (status === 200 && (data as { token: string }).token) {
+    setToken((data as { token: string }).token);
+  }
+  return { status, data };
+}
+
 export async function apiGetMe() {
   return request('auth', '/', { method: 'GET' });
 }
