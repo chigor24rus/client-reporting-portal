@@ -7,10 +7,10 @@ import psycopg2
 
 
 TRACKED_MASTERS = [
-    "Гармашев Сергей Владимирович",
-    "Пилипенко Александр Петрович",
-    "Седов Федор Иванович",
-    "Завистовский Владимир Андреевич",
+    'Гармашев Сергей',
+    'Пилипенко Александр',
+    'Седов Федор',
+    'Завистовский Владимир',
 ]
 
 
@@ -37,6 +37,7 @@ def handler(event: dict, context) -> dict:
                    TO_CHAR(period_month, 'YYYY-MM') as month
             FROM calls_report
             WHERE TO_CHAR(period_month, 'YYYY-MM') = %s
+              AND incoming_unique >= 0
             ORDER BY master_name
         """, (month,))
     else:
@@ -44,15 +45,17 @@ def handler(event: dict, context) -> dict:
             SELECT master_name, incoming_unique, outgoing_unique, missed_unique,
                    TO_CHAR(period_month, 'YYYY-MM') as month
             FROM calls_report
+            WHERE incoming_unique >= 0
             ORDER BY period_month DESC, master_name
         """)
 
     rows = cur.fetchall()
 
-    # Получаем доступные месяцы
+    # Доступные месяцы только из новых CSV-отчётов
     cur.execute("""
         SELECT DISTINCT TO_CHAR(period_month, 'YYYY-MM') as month
         FROM calls_report
+        WHERE incoming_unique >= 0
         ORDER BY month DESC
     """)
     months = [r[0] for r in cur.fetchall()]

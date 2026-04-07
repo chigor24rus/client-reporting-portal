@@ -285,7 +285,7 @@ export default function StatisticsPage() {
       <div className="metric-card">
         <div className="mb-4">
           <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
-          <p className="text-xs text-muted-foreground">Уникальные звонки по документам из 1С</p>
+          <p className="text-xs text-muted-foreground">Уникальные звонки по данным IP-телефонии</p>
         </div>
         {callsMonths.length === 0 ? (
           <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
