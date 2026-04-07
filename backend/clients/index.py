@@ -186,6 +186,29 @@ def handler(event: dict, context) -> dict:
                 row = cur.fetchone()
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'pending': int(row['cnt'] or 0)}, ensure_ascii=False)}
 
+            # ─── Сводная статистика: всего клиентов, архив, именинники ────────
+            if qs.get('summary_stats') == 'true':
+                cur.execute("""
+                    SELECT
+                        COUNT(DISTINCT phone) FILTER (WHERE is_test = FALSE AND is_excluded = FALSE) AS total,
+                        COUNT(DISTINCT phone) FILTER (WHERE is_test = FALSE AND is_excluded = TRUE) AS excluded,
+                        COUNT(DISTINCT phone) FILTER (
+                            WHERE is_test = FALSE AND is_excluded = FALSE
+                            AND birth_date IS NOT NULL
+                            AND (
+                                birth_date + (DATE_TRUNC('year', CURRENT_DATE) - DATE_TRUNC('year', birth_date))
+                                BETWEEN CURRENT_DATE - INTERVAL '7 days' AND CURRENT_DATE + INTERVAL '7 days'
+                            )
+                        ) AS birthdays
+                    FROM clients
+                """)
+                row = cur.fetchone()
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+                    'total': int(row['total'] or 0),
+                    'excluded': int(row['excluded'] or 0),
+                    'birthdays': int(row['birthdays'] or 0),
+                }, ensure_ascii=False)}
+
             # ─── Статистика результатов и типов работ за месяц ─────────────
             if qs.get('results_stats') == 'true':
                 month_param = qs.get('month', '')

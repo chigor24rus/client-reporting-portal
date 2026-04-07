@@ -117,6 +117,10 @@ export async function apiGetPendingCount() {
   return request('clients', '/?pending_count=true');
 }
 
+export async function apiGetSummaryStats() {
+  return request('clients', '/?summary_stats=true');
+}
+
 export async function apiGetDailyStats(month?: string) {
   return request('clients', `/?daily_stats=true${month ? `&month=${month}` : ''}`);
 }

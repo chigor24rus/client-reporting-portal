@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats, apiGetResultsStats } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats, apiGetResultsStats, apiGetSummaryStats } from '@/lib/api';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -27,17 +27,19 @@ const RESULT_COLORS: Record<string, string> = {
 };
 
 export default function StatisticsPage() {
-  const { clients = [], apiUsers = [] } = useApp();
+  const { apiUsers = [] } = useApp();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
   type CallsStat = { master: string; incoming: number; outgoing: number; month: string };
+  type SummaryStats = { total: number; excluded: number; birthdays: number };
 
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
   const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
   const [callsMonths, setCallsMonths] = useState<string[]>([]);
   const [resultsStats, setResultsStats] = useState<{ byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> } | null>(null);
+  const [summaryStats, setSummaryStats] = useState<SummaryStats | null>(null);
 
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -64,6 +66,9 @@ export default function StatisticsPage() {
         setCallsMonths(d.months);
       }
     });
+    apiGetSummaryStats().then(({ status, data }) => {
+      if (status === 200) setSummaryStats(data as SummaryStats);
+    });
   }, []);
 
   useEffect(() => {
@@ -85,34 +90,11 @@ export default function StatisticsPage() {
     }
   }, [globalMonth]);
 
-  const summary = useMemo(() => {
-    const all = (clients ?? []).filter(c => !c.isExcluded && !c.isTest);
-
-    // Уникальные клиенты по телефону
-    const uniqueByPhone = new Map<string, typeof all[0]>();
-    for (const c of all) {
-      if (!uniqueByPhone.has(c.phone)) uniqueByPhone.set(c.phone, c);
-    }
-    const uniqueClients = Array.from(uniqueByPhone.values());
-    const total = uniqueClients.length;
-
-    const excluded = new Set(
-      clients.filter(c => c.isExcluded && !c.isTest).map(c => c.phone)
-    ).size;
-
-    const today = new Date();
-    const birthdays = uniqueClients.filter(c => {
-      if (!c.birthDate) return false;
-      const d = new Date(c.birthDate);
-      const diff = Math.abs(
-        new Date(today.getFullYear(), d.getMonth(), d.getDate()).getTime() -
-        new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
-      ) / 86400000;
-      return diff <= 7;
-    }).length;
-
-    return { total, excluded, birthdays };
-  }, [clients]);
+  const summary = {
+    total: summaryStats?.total ?? 0,
+    excluded: summaryStats?.excluded ?? 0,
+    birthdays: summaryStats?.birthdays ?? 0,
+  };
 
   const byResult = useMemo(() => {
     if (!resultsStats) return [];
@@ -375,58 +357,54 @@ export default function StatisticsPage() {
           <div className="metric-card">
             <div className="mb-4">
               <p className="text-sm font-semibold text-foreground">Активность по дням</p>
-              {monthTotal > 0 && <p className="text-xs text-muted-foreground">Всего обработано: <span className="text-foreground font-semibold">{monthTotal}</span></p>}
+              <p className="text-xs text-muted-foreground">Всего обработано: {monthTotal}</p>
             </div>
             {days.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full data-table text-xs">
+                <table className="w-full data-table">
                   <thead>
                     <tr>
-                      <th className="text-left">Дата</th>
-                      {masters.map(m => (
-                        <th key={m.userId} className="text-center whitespace-nowrap" colSpan={2}>{m.name}</th>
+                      <th className="text-left">Мастер</th>
+                      {days.map(day => (
+                        <th key={day} className="text-center whitespace-nowrap" colSpan={2}>
+                          {new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
+                        </th>
                       ))}
+                      <th className="text-center" colSpan={2}>Итого</th>
                     </tr>
                     <tr>
                       <th></th>
-                      {masters.map(m => (
+                      {days.map(day => (
                         <>
-                          <th key={m.userId + '_c'} className="text-center text-muted-foreground font-normal">Обраб.</th>
-                          <th key={m.userId + '_b'} className="text-center text-muted-foreground font-normal">Записано</th>
+                          <th key={day + '_c'} className="text-center text-xs font-normal text-muted-foreground pb-1">Обраб.</th>
+                          <th key={day + '_b'} className="text-center text-xs font-normal text-success pb-1">Запис.</th>
                         </>
                       ))}
+                      <th className="text-center text-xs font-normal text-muted-foreground pb-1">Обраб.</th>
+                      <th className="text-center text-xs font-normal text-success pb-1">Запис.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {days.map(day => (
-                      <tr key={day}>
-                        <td className="text-muted-foreground whitespace-nowrap">
-                          {new Date(day + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })}
-                        </td>
-                        {masters.map(m => {
-                          const val = map[day]?.[m.userId];
-                          return (
-                            <>
-                              <td key={m.userId + '_c'} className="text-center text-foreground">{val ? val.contacted : <span className="text-muted-foreground/30">—</span>}</td>
-                              <td key={m.userId + '_b'} className="text-center text-success font-semibold">{val ? val.booked : <span className="text-muted-foreground/30">—</span>}</td>
-                            </>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                    <tr className="border-t border-border">
-                      <td className="font-semibold text-foreground">Итого</td>
-                      {masters.map(m => {
-                        const tc = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.contacted, 0);
-                        const tb = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.booked, 0);
-                        return (
-                          <>
-                            <td key={m.userId + '_c'} className="text-center font-semibold text-foreground">{tc || '—'}</td>
-                            <td key={m.userId + '_b'} className="text-center font-semibold text-success">{tb || '—'}</td>
-                          </>
-                        );
-                      })}
-                    </tr>
+                    {masters.map(m => {
+                      const tc = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.contacted, 0);
+                      const tb = dailyStats.filter(s => s.userId === m.userId).reduce((s, x) => s + x.booked, 0);
+                      return (
+                        <tr key={m.userId}>
+                          <td className="font-medium text-foreground whitespace-nowrap">{m.name}</td>
+                          {days.map(day => {
+                            const val = map[day]?.[m.userId];
+                            return (
+                              <>
+                                <td key={day + '_c'} className="text-center text-foreground">{val ? val.contacted : <span className="text-muted-foreground/30">—</span>}</td>
+                                <td key={day + '_b'} className="text-center text-success font-semibold">{val?.booked ? val.booked : <span className="text-muted-foreground/30">—</span>}</td>
+                              </>
+                            );
+                          })}
+                          <td className="text-center font-semibold text-foreground">{tc || '—'}</td>
+                          <td className="text-center font-semibold text-success">{tb || '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -439,3 +417,4 @@ export default function StatisticsPage() {
     </div>
   );
 }
+
