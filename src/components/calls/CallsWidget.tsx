@@ -5,21 +5,20 @@ import { apiGetCallsStats } from '@/lib/api';
 type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
 type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number; missed_by_month: Record<string, number>; last_date: string | null };
 
-function formatMonthLabel(val: string) {
-  const [year, month] = val.split('-');
-  const d = new Date(Number(year), Number(month) - 1, 1);
-  const label = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-  return label.charAt(0).toUpperCase() + label.slice(1);
+
+interface Props {
+  month?: string; // '' или undefined = все время, 'YYYY-MM' = конкретный месяц
 }
 
-export default function CallsWidget() {
+export default function CallsWidget({ month: externalMonth }: Props) {
   const [allStats, setAllStats] = useState<CallsStat[]>([]);
-  const [months, setMonths] = useState<string[]>([]);
+  const [hasData, setHasData] = useState(false);
   const [totalMissed, setTotalMissed] = useState(0);
   const [missedByMonth, setMissedByMonth] = useState<Record<string, number>>({});
   const [lastDate, setLastDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
+  const selectedMonth = externalMonth || 'all';
 
   useEffect(() => {
     setLoading(true);
@@ -27,7 +26,7 @@ export default function CallsWidget() {
       if (status === 200) {
         const d = data as CallsData;
         setAllStats(d.stats);
-        setMonths(d.months);
+        setHasData((d.months ?? []).length > 0);
         setTotalMissed(d.company_missed ?? 0);
         setMissedByMonth(d.missed_by_month ?? {});
         setLastDate(d.last_date ?? null);
@@ -56,7 +55,7 @@ export default function CallsWidget() {
     ? totalMissed
     : (missedByMonth[selectedMonth] ?? 0);
 
-  if (months.length === 0 && !loading) {
+  if (!hasData && !loading) {
     return (
       <div className="metric-card">
         <div className="flex items-center gap-3 py-6 justify-center text-muted-foreground text-sm">
@@ -74,33 +73,12 @@ export default function CallsWidget() {
           <p className="text-sm font-semibold text-foreground">Звонки мастеров</p>
           <p className="text-xs text-muted-foreground">Уникальные звонки по данным IP-телефонии</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {lastDate && selectedMonth === 'all' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-secondary rounded-lg">
-              <Icon name="CalendarCheck" size={13} className="text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">по <span className="text-foreground font-semibold">{lastDate}</span></span>
-            </div>
-          )}
-          {months.length > 0 && (
-            <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 flex-wrap">
-              <button
-                onClick={() => setSelectedMonth('all')}
-                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${selectedMonth === 'all' ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Всё время
-              </button>
-              {months.map(m => (
-                <button
-                  key={m}
-                  onClick={() => setSelectedMonth(m)}
-                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all whitespace-nowrap ${selectedMonth === m ? 'bg-card text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {formatMonthLabel(m)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {lastDate && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-secondary rounded-lg">
+            <Icon name="CalendarCheck" size={13} className="text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">по <span className="text-foreground font-semibold">{lastDate}</span></span>
+          </div>
+        )}
       </div>
 
       {loading ? (

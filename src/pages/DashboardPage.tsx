@@ -104,7 +104,7 @@ export default function DashboardPage() {
         monthOptions={monthOptions}
       />
 
-      <CallsWidget />
+      <CallsWidget month={selectedMonth} />
 
       <div>
         <div className="flex items-center justify-between mb-3">
