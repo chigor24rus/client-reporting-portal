@@ -1,0 +1,1 @@
+ALTER TABLE calls_report ADD COLUMN IF NOT EXISTS first_date DATE;
