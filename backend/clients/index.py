@@ -773,12 +773,13 @@ def handler(event: dict, context) -> dict:
             if 'result' in body:
                 r_val = body['result']
                 PENDING_RESULTS = {'7', '5'}
+                FULL_EXCLUDE_RESULTS = {'3', '4', '8'}
                 fields.append("result = %s")
                 values.append(r_val)
                 fields.append("status = %s")
                 values.append('pending' if not r_val or r_val in PENDING_RESULTS else 'done')
                 fields.append("is_excluded = %s")
-                values.append(r_val in ('3', '4', '8'))
+                values.append(r_val in FULL_EXCLUDE_RESULTS)
                 fields.append("result_at = NOW()")
                 # Фиксируем мастера, который сохранил результат
                 if body.get('user_id'):
@@ -807,6 +808,15 @@ def handler(event: dict, context) -> dict:
                 values
             )
             updated = cur.fetchone()
+
+            # Результаты 3, 4, 8 — исключаем ВСЕ работы клиента по телефону
+            if updated and body.get('result') in ('3', '4', '8'):
+                cur.execute(
+                    """UPDATE clients SET is_excluded = TRUE, status = 'done',
+                       result = COALESCE(result, %s), result_at = COALESCE(result_at, NOW()), updated_at = NOW()
+                       WHERE phone = %s AND id != %s AND is_excluded = FALSE""",
+                    (r_val, updated['phone'], client_id)
+                )
 
             # Если «Записан на выполнение всех работ» — закрываем все остальные работы клиента
             if updated and body.get('result') == '1':

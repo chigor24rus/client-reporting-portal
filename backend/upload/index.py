@@ -432,6 +432,61 @@ def handler(event: dict, context) -> dict:
                         [(r[0], r[1], r[2], r[3], today_date, 'pending', True) for r in no_data_rows]
                     )
 
+            # ─── ЛОГИКА ВОЗВРАТА ИСКЛЮЧЁННЫХ КЛИЕНТОВ ────────────────────────
+            # Проверяем каждый VIN из файла: есть ли по нему исключённые клиенты
+            if vins_in_file:
+                # Строим карту: vin -> (phone, name) из текущего файла
+                file_vin_map = {}  # vin -> {phone, name}
+                for c in clients:
+                    if c['vin'] and c['vin'] != NO_VIN:
+                        file_vin_map[c['vin']] = {'phone': c['phone'], 'name': c['name']}
+
+                # Получаем исключённых клиентов по этим VIN
+                cur.execute(
+                    """SELECT DISTINCT ON (phone, vin) id, phone, name, vin, result
+                       FROM clients
+                       WHERE vin = ANY(%s) AND is_excluded = TRUE
+                       ORDER BY phone, vin, id""",
+                    (vins_in_file,)
+                )
+                excluded_rows = cur.fetchall()
+
+                for row in excluded_rows:
+                    ex_id, ex_phone, ex_name, ex_vin, ex_result = row[0], row[1], row[2], row[3], row[4]
+                    file_info = file_vin_map.get(ex_vin)
+                    if not file_info:
+                        continue
+
+                    file_phone = file_info['phone']
+                    file_name = file_info['name']
+
+                    # Результат 4 (продал авто): VIN теперь у другого телефона — новый владелец
+                    # Старые записи остаются исключёнными, новый клиент уже вставлен через upsert выше
+                    # Дополнительно: снимаем is_excluded с новых строк этого VIN если они принадлежат новому телефону
+                    if ex_result == '4' and file_phone and file_phone != ex_phone:
+                        cur.execute(
+                            """UPDATE clients SET is_excluded = FALSE, result = NULL, status = 'pending',
+                               result_at = NULL, updated_at = NOW()
+                               WHERE vin = %s AND phone = %s AND is_excluded = TRUE AND result = '4'""",
+                            (ex_vin, file_phone)
+                        )
+
+                    # Результат 8 (телефон не принадлежит клиенту):
+                    # Тот же VIN + похожее имя, но другой телефон — обновляем телефон и возвращаем в работу
+                    elif ex_result == '8' and file_phone and file_phone != ex_phone:
+                        ex_name_norm = normalize_name(ex_name)
+                        file_name_norm = normalize_name(file_name)
+                        # Сравниваем фамилию (первое слово) — если совпадает, считаем тем же клиентом
+                        ex_last = ex_name_norm.split()[0] if ex_name_norm else ''
+                        file_last = file_name_norm.split()[0] if file_name_norm else ''
+                        if ex_last and file_last and ex_last == file_last:
+                            cur.execute(
+                                """UPDATE clients SET phone = %s, name = %s, is_excluded = FALSE,
+                                   result = NULL, status = 'pending', result_at = NULL, updated_at = NOW()
+                                   WHERE phone = %s AND is_excluded = TRUE AND result = '8'""",
+                                (file_phone, file_name, ex_phone)
+                            )
+
             conn.commit()
             conn.close()
 
