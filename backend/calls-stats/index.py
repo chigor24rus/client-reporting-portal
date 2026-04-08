@@ -61,21 +61,24 @@ def handler(event: dict, context) -> dict:
     months = [r[0] for r in cur.fetchall()]
 
     # Общие пропущенные + последняя дата данных
-    if month:
-        cur.execute("""
-            SELECT COALESCE(SUM(company_missed), 0), MAX(last_date)
-            FROM calls_report
-            WHERE TO_CHAR(period_month, 'YYYY-MM') = %s AND incoming_unique >= 0
-        """, (month,))
-    else:
-        cur.execute("""
-            SELECT COALESCE(SUM(company_missed), 0), MAX(last_date)
-            FROM calls_report
-            WHERE incoming_unique >= 0
-        """)
+    cur.execute("""
+        SELECT COALESCE(SUM(company_missed), 0), MAX(last_date)
+        FROM calls_report
+        WHERE incoming_unique >= 0
+    """)
     agg = cur.fetchone()
     company_missed = int(agg[0])
     last_date = agg[1].strftime('%d.%m.%Y') if agg[1] else None
+
+    # Пропущенные по каждому месяцу отдельно
+    cur.execute("""
+        SELECT TO_CHAR(period_month, 'YYYY-MM'), COALESCE(SUM(company_missed), 0)
+        FROM calls_report
+        WHERE incoming_unique >= 0
+        GROUP BY period_month
+        ORDER BY period_month DESC
+    """)
+    missed_by_month = {row[0]: int(row[1]) for row in cur.fetchall()}
 
     cur.close()
     conn.close()
@@ -91,13 +94,6 @@ def handler(event: dict, context) -> dict:
         for row in rows
     ]
 
-    if month:
-        existing = {s['master'] for s in stats}
-        for master in TRACKED_MASTERS:
-            if master not in existing:
-                stats.append({'master': master, 'incoming': 0, 'outgoing': 0, 'missed': 0, 'month': month})
-        stats.sort(key=lambda x: TRACKED_MASTERS.index(x['master']) if x['master'] in TRACKED_MASTERS else 99)
-
     return {
         'statusCode': 200,
         'headers': cors,
@@ -105,6 +101,7 @@ def handler(event: dict, context) -> dict:
             'stats': stats,
             'months': months,
             'company_missed': company_missed,
+            'missed_by_month': missed_by_month,
             'last_date': last_date,
         }, ensure_ascii=False)
     }

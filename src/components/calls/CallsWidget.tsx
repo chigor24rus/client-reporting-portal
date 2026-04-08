@@ -3,7 +3,7 @@ import Icon from '@/components/ui/icon';
 import { apiGetCallsStats } from '@/lib/api';
 
 type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
-type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number; last_date: string | null };
+type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number; missed_by_month: Record<string, number>; last_date: string | null };
 
 function formatMonthLabel(val: string) {
   const [year, month] = val.split('-');
@@ -16,6 +16,7 @@ export default function CallsWidget() {
   const [allStats, setAllStats] = useState<CallsStat[]>([]);
   const [months, setMonths] = useState<string[]>([]);
   const [totalMissed, setTotalMissed] = useState(0);
+  const [missedByMonth, setMissedByMonth] = useState<Record<string, number>>({});
   const [lastDate, setLastDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
@@ -28,6 +29,7 @@ export default function CallsWidget() {
         setAllStats(d.stats);
         setMonths(d.months);
         setTotalMissed(d.company_missed ?? 0);
+        setMissedByMonth(d.missed_by_month ?? {});
         setLastDate(d.last_date ?? null);
       }
       setLoading(false);
@@ -52,7 +54,7 @@ export default function CallsWidget() {
 
   const companyMissed = selectedMonth === 'all'
     ? totalMissed
-    : allStats.filter(s => s.month === selectedMonth).reduce((sum, s) => sum + (s.missed ?? 0), 0);
+    : (missedByMonth[selectedMonth] ?? 0);
 
   if (months.length === 0 && !loading) {
     return (
