@@ -290,7 +290,7 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      <CallsWidget month={globalMonth} />
+      <CallsWidget />
 
       {(() => {
         const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => a.localeCompare(b));

@@ -5,13 +5,8 @@ import { apiGetCallsStats } from '@/lib/api';
 type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
 type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number; last_date: string | null };
 
-interface Props {
-  month: string;
-}
-
-export default function CallsWidget({ month }: Props) {
+export default function CallsWidget() {
   const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
-  const [callsMonths, setCallsMonths] = useState<string[]>([]);
   const [companyMissed, setCompanyMissed] = useState(0);
   const [lastDate, setLastDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,30 +16,23 @@ export default function CallsWidget({ month }: Props) {
     apiGetCallsStats().then(({ status, data }) => {
       if (status === 200) {
         const d = data as CallsData;
-        setCallsMonths(d.months);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!month) {
-      setCallsStats([]);
-      setCompanyMissed(0);
-      setLastDate(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    apiGetCallsStats(month).then(({ status, data }) => {
-      if (status === 200) {
-        const d = data as CallsData;
-        setCallsStats(d.stats);
+        // Суммируем по мастерам за все периоды
+        const totals: Record<string, { incoming: number; outgoing: number; missed: number }> = {};
+        for (const s of d.stats) {
+          if (!totals[s.master]) totals[s.master] = { incoming: 0, outgoing: 0, missed: 0 };
+          totals[s.master].incoming += s.incoming;
+          totals[s.master].outgoing += s.outgoing;
+          totals[s.master].missed += s.missed;
+        }
+        const merged = Object.entries(totals).map(([master, v]) => ({ master, ...v, month: '' }));
+        merged.sort((a, b) => a.master.localeCompare(b.master, 'ru'));
+        setCallsStats(merged);
         setCompanyMissed(d.company_missed ?? 0);
         setLastDate(d.last_date ?? null);
       }
       setLoading(false);
     });
-  }, [month]);
+  }, []);
 
   if (callsMonths.length === 0 && !loading) {
     return (
