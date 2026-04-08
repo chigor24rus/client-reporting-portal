@@ -26,11 +26,7 @@ MASTERS = {
 INTERNAL_NUMBERS = set(MASTERS.keys())
 
 # Временные правила коррекции внутренних номеров: (дата, исходный_номер) -> правильный_номер
-# Убирать после загрузки соответствующего отчёта
-NUMBER_CORRECTIONS: dict[tuple, str] = {
-    # 03.04.2026: Завистовский работал с номера 103 вместо своего 104
-    (date_type(2026, 4, 3), '103'): '104',
-}
+NUMBER_CORRECTIONS: dict[tuple, str] = {}
 
 
 def normalize_phone(raw: str) -> str:
