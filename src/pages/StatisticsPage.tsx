@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
-import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetCallsStats, apiGetResultsStats, apiGetSummaryStats } from '@/lib/api';
+import { apiGetPendingCount, apiGetDailyStats, apiGetMastersStats, apiGetResultsStats, apiGetSummaryStats } from '@/lib/api';
 import CallsWidget from '@/components/calls/CallsWidget';
 import { CALL_RESULTS, WORK_INTERVALS } from '@/data/mockData';
 import {
@@ -32,15 +32,11 @@ export default function StatisticsPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   type DailyStat = { day: string; userId: string; name: string; contacted: number; booked: number };
   type MasterStat = { userId: string; masterId: string; name: string; total: number; done: number; callback: number; contacted: number; rate: number };
-  type CallsStat = { master: string; incoming: number; outgoing: number; missed: number; month: string };
-  type CallsData = { stats: CallsStat[]; months: string[]; company_missed: number };
   type SummaryStats = { total: number; excluded: number; birthdays: number };
 
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [mastersStats, setMastersStats] = useState<MasterStat[]>([]);
-  const [callsStats, setCallsStats] = useState<CallsStat[]>([]);
-  const [callsMonths, setCallsMonths] = useState<string[]>([]);
-  const [companyMissed, setCompanyMissed] = useState<number>(0);
+
   const [resultsStats, setResultsStats] = useState<{ byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> } | null>(null);
   const [summaryStats, setSummaryStats] = useState<SummaryStats | null>(null);
 
@@ -63,12 +59,6 @@ export default function StatisticsPage() {
     apiGetPendingCount().then(({ status, data }) => {
       if (status === 200) setPendingCount((data as { pending: number }).pending);
     });
-    apiGetCallsStats().then(({ status, data }) => {
-      if (status === 200) {
-        const d = data as CallsData;
-        setCallsMonths(d.months);
-      }
-    });
     apiGetSummaryStats().then(({ status, data }) => {
       if (status === 200) setSummaryStats(data as SummaryStats);
     });
@@ -84,18 +74,6 @@ export default function StatisticsPage() {
     apiGetResultsStats(globalMonth || undefined).then(({ status, data }) => {
       if (status === 200) setResultsStats(data as { byResult: Record<string, number>; byWork: Record<string, { total: number; done: number }> });
     });
-    if (globalMonth) {
-      apiGetCallsStats(globalMonth).then(({ status, data }) => {
-        if (status === 200) {
-          const d = data as CallsData;
-          setCallsStats(d.stats);
-          setCompanyMissed(d.company_missed ?? 0);
-        }
-      });
-    } else {
-      setCallsStats([]);
-      setCompanyMissed(0);
-    }
   }, [globalMonth]);
 
   const summary = {
@@ -290,7 +268,7 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      <CallsWidget />
+      <CallsWidget month={globalMonth} />
 
       {(() => {
         const days = [...new Set(dailyStats.map(s => s.day))].sort((a, b) => a.localeCompare(b));
