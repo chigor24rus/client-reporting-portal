@@ -39,13 +39,24 @@ def handler(event: dict, context) -> dict:
             body = json.loads(event.get('body') or '{}')
             qs_action = (event.get('queryStringParameters') or {}).get('action', '')
 
-            # POST ?action=impersonate — войти в аккаунт мастера (только мастер-паролем)
+            # POST ?action=impersonate — войти в аккаунт мастера
             if qs_action == 'impersonate':
-                master_password = os.environ.get('MASTER_PASSWORD', '')
-                provided = (body.get('master_password') or '').strip()
                 target_user_id = body.get('user_id')
-                if not master_password or not provided or provided != master_password:
-                    return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Неверный мастер-пароль'}, ensure_ascii=False)}
+                provided = (body.get('master_password') or '').strip()
+                master_password = os.environ.get('MASTER_PASSWORD', '')
+
+                # Проверяем: либо авторизованный админ, либо верный мастер-пароль
+                session_token = (event.get('headers') or {}).get('X-Session-Id', '')
+                is_admin_session = False
+                if session_token:
+                    cur.execute("SELECT role FROM sessions WHERE token = %s", (session_token,))
+                    sr = cur.fetchone()
+                    if sr and sr[0] == 'admin':
+                        is_admin_session = True
+
+                if not is_admin_session:
+                    if not master_password or not provided or provided != master_password:
+                        return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Неверный мастер-пароль'}, ensure_ascii=False)}
                 if not target_user_id:
                     return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'user_id обязателен'}, ensure_ascii=False)}
                 cur.execute("SELECT id, name, phone, role, active FROM users WHERE id = %s", (target_user_id,))

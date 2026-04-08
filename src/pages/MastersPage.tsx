@@ -14,21 +14,12 @@ export default function MastersPage() {
   const [editError, setEditError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [impersonateMaster, setImpersonateMaster] = useState<ApiUser | null>(null);
-  const [masterPwd, setMasterPwd] = useState('');
-  const [impersonateError, setImpersonateError] = useState('');
-  const [impersonateLoading, setImpersonateLoading] = useState(false);
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
 
-  async function handleImpersonate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!impersonateMaster) return;
-    setImpersonateError('');
-    setImpersonateLoading(true);
-    const err = await loginAs(impersonateMaster.id, masterPwd);
-    setImpersonateLoading(false);
-    if (err) { setImpersonateError(err); return; }
-    setImpersonateMaster(null);
-    setMasterPwd('');
+  async function handleImpersonate(master: ApiUser) {
+    setImpersonatingId(master.id);
+    await loginAs(master.id, '');
+    setImpersonatingId(null);
   }
 
   const masters = apiUsers.filter(u => u.role === 'master');
@@ -185,11 +176,12 @@ export default function MastersPage() {
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
-                    onClick={() => { setImpersonateMaster(master); setMasterPwd(''); setImpersonateError(''); }}
-                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-warning hover:border-warning/50 transition-all"
+                    onClick={() => handleImpersonate(master)}
+                    disabled={impersonatingId === master.id}
+                    className="p-2 rounded-lg border border-border text-muted-foreground hover:text-warning hover:border-warning/50 transition-all disabled:opacity-50"
                     title="Войти как мастер"
                   >
-                    <Icon name="LogIn" size={15} />
+                    <Icon name={impersonatingId === master.id ? 'Loader2' : 'LogIn'} size={15} className={impersonatingId === master.id ? 'animate-spin' : ''} />
                   </button>
                   <button
                     onClick={() => openEdit(master)}
@@ -284,47 +276,7 @@ export default function MastersPage() {
         </div>
       )}
 
-      {impersonateMaster && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setImpersonateMaster(null)}>
-          <div className="bg-card border border-warning/30 rounded-xl p-6 w-full max-w-sm shadow-xl animate-fade-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Icon name="ShieldCheck" size={18} className="text-warning" />
-                <p className="text-sm font-bold text-foreground">Войти как мастер</p>
-              </div>
-              <button onClick={() => setImpersonateMaster(null)} className="text-muted-foreground hover:text-foreground transition-colors">
-                <Icon name="X" size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground mb-4">Вы войдёте в аккаунт <span className="text-foreground font-medium">{impersonateMaster.name}</span> и увидите интерфейс его глазами.</p>
-            <form onSubmit={handleImpersonate} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Мастер-пароль</label>
-                <input
-                  type="password"
-                  value={masterPwd}
-                  onChange={e => setMasterPwd(e.target.value)}
-                  placeholder="Введите мастер-пароль"
-                  autoFocus
-                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-warning"
-                />
-              </div>
-              {impersonateError && (
-                <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                  <Icon name="AlertCircle" size={14} />{impersonateError}
-                </div>
-              )}
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setImpersonateMaster(null)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">Отмена</button>
-                <button type="submit" disabled={impersonateLoading || !masterPwd} className="px-4 py-2 text-sm bg-warning text-black font-semibold rounded-lg hover:bg-warning/90 disabled:opacity-50 transition-all flex items-center gap-2">
-                  {impersonateLoading && <Icon name="Loader2" size={14} className="animate-spin" />}
-                  Войти
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
