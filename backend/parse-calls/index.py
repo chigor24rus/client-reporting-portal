@@ -46,6 +46,7 @@ def parse_csv(text: str) -> tuple:
     Возвращает:
       master_stats = { ext: { day: { out, out_answered, in, missed_raw } } }
       company_stats = { day: { missed_raw: set, answered_out: set } }
+      missed_by_day = { day: set(phones) } — пропущенные без перезвона по дням
       period_month: date
       first_date: date
       last_date: date
@@ -60,6 +61,7 @@ def parse_csv(text: str) -> tuple:
     }))
 
     company_stats = defaultdict(lambda: {'missed_raw': set(), 'answered_out': set()})
+    missed_by_day: dict = defaultdict(set)
 
     first_date = None
     last_date = None
@@ -115,9 +117,15 @@ def parse_csv(text: str) -> tuple:
                     continue
                 if code != 'ANSWERED':
                     company_stats[day]['missed_raw'].add(client)
+                    missed_by_day[day].add(client)
+
+    # Убираем из пропущенных тех, кому перезвонили в тот же день
+    for day, phones in missed_by_day.items():
+        answered = company_stats[day]['answered_out']
+        missed_by_day[day] = phones - answered
 
     period_month = first_date.replace(day=1) if first_date else None
-    return master_stats, company_stats, period_month, first_date, last_date
+    return master_stats, company_stats, missed_by_day, period_month, first_date, last_date
 
 
 def aggregate_masters(master_stats: dict) -> dict:
@@ -169,7 +177,7 @@ def handler(event: dict, context) -> dict:
     except Exception as e:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': f'Ошибка декодирования: {str(e)}'})}
 
-    master_stats, company_stats, period_month, first_date, last_date = parse_csv(text)
+    master_stats, company_stats, missed_by_day, period_month, first_date, last_date = parse_csv(text)
 
     if not period_month:
         return {'statusCode': 400, 'headers': cors, 'body': json.dumps({'error': 'Не удалось определить период из файла. Проверьте формат CSV.'})}
@@ -243,6 +251,15 @@ def handler(event: dict, context) -> dict:
 
         saved.append({'master': master_name, 'incoming': final_incoming,
                       'outgoing': final_outgoing, 'missed': final_missed})
+
+    # Сохраняем пропущенные номера: удаляем старые за этот период, вставляем новые
+    cur.execute("DELETE FROM calls_missed WHERE period_month = %s", (period_month,))
+    for day, phones in missed_by_day.items():
+        for phone in phones:
+            cur.execute(
+                "INSERT INTO calls_missed (phone, call_date, period_month, uploaded_by) VALUES (%s, %s, %s, %s)",
+                (phone, day, period_month, uploaded_by)
+            )
 
     conn.commit()
     cur.close()

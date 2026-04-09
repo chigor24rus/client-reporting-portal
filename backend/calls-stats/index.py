@@ -28,6 +28,32 @@ def handler(event: dict, context) -> dict:
     params = event.get('queryStringParameters') or {}
     month = params.get('month')
 
+    # GET ?missed_phones=true&date=2026-04-09 — пропущенные номера за конкретную дату
+    if params.get('missed_phones') == 'true':
+        call_date = params.get('date')
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        cur = conn.cursor()
+        if call_date:
+            cur.execute(
+                "SELECT phone, call_date FROM calls_missed WHERE call_date = %s ORDER BY phone",
+                (call_date,)
+            )
+        else:
+            cur.execute(
+                "SELECT phone, call_date FROM calls_missed ORDER BY call_date DESC, phone"
+            )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return {
+            'statusCode': 200,
+            'headers': cors,
+            'body': json.dumps({
+                'missed': [{'phone': r[0], 'date': r[1].strftime('%d.%m.%Y')} for r in rows],
+                'total': len(rows),
+            }, ensure_ascii=False)
+        }
+
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
 
