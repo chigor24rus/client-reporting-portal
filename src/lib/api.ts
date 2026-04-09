@@ -163,4 +163,9 @@ export async function apiGetCallsStats(month?: string) {
   return request('calls-stats', `/${qs}`);
 }
 
+export async function apiGetMissedPhones(date?: string) {
+  const qs = date ? `?missed_phones=true&date=${date}` : '?missed_phones=true';
+  return request('calls-stats', `/${qs}`);
+}
+
 export { getToken };
