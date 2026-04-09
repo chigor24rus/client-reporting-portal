@@ -450,7 +450,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE {test_filter_no_alias}
+                    WHERE is_excluded = FALSE AND is_no_data = FALSE {test_filter_no_alias}
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -463,6 +463,7 @@ def handler(event: dict, context) -> dict:
                 JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
+                  AND c.is_no_data = FALSE
                   {test_filter}
                   AND c.status != 'done'
                   AND (c.result != '5' OR c.callback_date IS NULL OR c.callback_date <= CURRENT_DATE)
@@ -500,7 +501,7 @@ def handler(event: dict, context) -> dict:
                 WITH latest AS (
                     SELECT phone, work, vin, MAX(work_date) AS max_work_date
                     FROM clients
-                    WHERE is_excluded = FALSE {test_filter_no_alias}
+                    WHERE is_excluded = FALSE AND is_no_data = FALSE {test_filter_no_alias}
                     GROUP BY phone, work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -513,6 +514,7 @@ def handler(event: dict, context) -> dict:
                 JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
+                  AND c.is_no_data = FALSE
                   {test_filter}
                   AND c.status != 'done'
                   AND c.result = '5'
