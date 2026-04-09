@@ -77,7 +77,7 @@ function WorkRow({
           <span className="ml-2 text-xs text-muted-foreground font-mono">{work.vin}</span>
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Предстоящие</span>
-        <span className="text-xs text-muted-foreground flex-shrink-0">{work.workDate ? new Date(work.workDate).toLocaleDateString('ru-RU') : ''}</span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">{work.workDate && work.workDate !== '0' ? new Date(work.workDate + 'T00:00:00').toLocaleDateString('ru-RU') : ''}</span>
         <Icon name="ChevronDown" size={14} className="text-muted-foreground flex-shrink-0" />
       </div>
     );
@@ -97,7 +97,7 @@ function WorkRow({
               <span className="text-xs text-destructive font-medium">Нет данных</span>
             ) : (
               <>
-                <p className="text-xs text-foreground">{work.workDate ? new Date(work.workDate).toLocaleDateString('ru-RU') : '—'}</p>
+                <p className="text-xs text-foreground">{work.workDate && work.workDate !== '0' ? new Date(work.workDate + 'T00:00:00').toLocaleDateString('ru-RU') : '—'}</p>
                 <p className="text-xs text-muted-foreground">{work.mileage?.toLocaleString()} км</p>
               </>
             )}
