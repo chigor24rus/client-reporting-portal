@@ -549,7 +549,7 @@ def handler(event: dict, context) -> dict:
                 is_active = age_months >= min_m
                 is_upcoming = not is_active
                 next_service = work_date + timedelta(days=int(min_m * 30.44))
-                urgency_seconds = (today - next_service).total_seconds()
+                urgency_seconds = abs((today - next_service).total_seconds())
 
                 groups[phone]['works'].append({
                     'id': str(r['id']),
