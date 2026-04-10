@@ -396,7 +396,7 @@ def handler(event: dict, context) -> dict:
                            c.callback_date, c.is_excluded, c.birth_date, c.total_spent, c.is_test
                     FROM clients c
                     WHERE c.is_test = FALSE
-                    ORDER BY c.vin, c.work, c.work_date DESC
+                    ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                 """)
                 rows = cur.fetchall()
                 clients = []
@@ -545,13 +545,6 @@ def handler(event: dict, context) -> dict:
                         'locked_at': r['locked_at'].isoformat() if r['locked_at'] else None,
                         'locked_by_name': r['locked_by_name'] if r['locked_by_name'] else None,
                     }
-                else:
-                    # Обновляем имя/телефон если эта работа свежее (берём актуального владельца)
-                    if r['work_date'] and (not groups[vin]['works'] or
-                            r['work_date'].strftime('%Y-%m-%d') > max((w['workDate'] or '') for w in groups[vin]['works'])):
-                        groups[vin]['phone'] = r['phone']
-                        groups[vin]['name'] = r['name']
-
                 work = r['work']
                 min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
                 work_date = r['work_date']
@@ -857,6 +850,11 @@ def handler(event: dict, context) -> dict:
             }, ensure_ascii=False)}
 
         return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'}, ensure_ascii=False)}
+
+    except Exception as e:
+        import traceback
+        print(f'HANDLER ERROR: {e}\n{traceback.format_exc()}')
+        return {'statusCode': 500, 'headers': CORS, 'body': json.dumps({'error': str(e)}, ensure_ascii=False)}
 
     finally:
         conn.close()
