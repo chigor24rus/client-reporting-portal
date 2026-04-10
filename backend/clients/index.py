@@ -303,6 +303,25 @@ def handler(event: dict, context) -> dict:
             # ─── Поиск по всей базе (для мастера) ───────────────────────────
             if search_query and len(search_query) >= 2:
                 q = f'%{search_query.lower()}%'
+                # Шаг 1: находим VIN по имени/телефону/VIN
+                cur.execute(f"""
+                    SELECT DISTINCT vin
+                    FROM clients
+                    WHERE is_excluded = FALSE
+                      AND vin != 'NO_VIN'
+                      {test_filter_no_alias}
+                      AND (
+                          LOWER(name) LIKE %s
+                          OR LOWER(phone) LIKE %s
+                          OR LOWER(vin) LIKE %s
+                      )
+                """, (q, q, q))
+                found_vins = [r['vin'] for r in cur.fetchall()]
+
+                if not found_vins:
+                    return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': []}, ensure_ascii=False)}
+
+                # Шаг 2: берём все работы по найденным VIN — с актуальным владельцем
                 cur.execute(f"""
                     SELECT DISTINCT ON (c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -315,13 +334,9 @@ def handler(event: dict, context) -> dict:
                       AND c.vin != 'NO_VIN'
                       AND c.is_no_data = FALSE
                       {test_filter}
-                      AND (
-                          LOWER(c.name) LIKE %s
-                          OR LOWER(c.phone) LIKE %s
-                          OR LOWER(c.vin) LIKE %s
-                      )
+                      AND c.vin = ANY(%s)
                     ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
-                """, (q, q, q))
+                """, (found_vins,))
                 rows = cur.fetchall()
 
                 if search_flat:
@@ -345,17 +360,29 @@ def handler(event: dict, context) -> dict:
 
                 # Формат карточек для мастера (DashboardPage) — группируем по VIN
                 today = date.today()
+
+                # Подтягиваем birth_date и total_spent из любой записи по VIN (могут быть у другого владельца)
+                cur.execute("""
+                    SELECT DISTINCT ON (vin) vin, birth_date, total_spent
+                    FROM clients
+                    WHERE vin = ANY(%s) AND birth_date IS NOT NULL
+                    ORDER BY vin, total_spent DESC NULLS LAST
+                """, (found_vins,))
+                vin_meta = {r['vin']: {'birth_date': r['birth_date'], 'total_spent': float(r['total_spent']) if r['total_spent'] else None}
+                            for r in cur.fetchall()}
+
                 groups: dict = {}
                 for r in rows:
                     vin = r['vin'] or r['name']
                     if vin not in groups:
+                        meta = vin_meta.get(vin, {})
                         groups[vin] = {
                             'phone': r['phone'],
                             'name': r['name'],
                             'works': [],
                             'min_urgency': float('inf'),
-                            'birth_date': r['birth_date'],
-                            'total_spent': float(r['total_spent']) if r['total_spent'] else None,
+                            'birth_date': meta.get('birth_date') or r['birth_date'],
+                            'total_spent': meta.get('total_spent') or (float(r['total_spent']) if r['total_spent'] else None),
                             'is_birthday': False,
                             'is_deferred': False,
                             'callback_date': None,
@@ -401,7 +428,7 @@ def handler(event: dict, context) -> dict:
                         'status': card_status,
                         'birthDate': g['birth_date'].strftime('%Y-%m-%d') if g['birth_date'] else None,
                         'totalSpent': g['total_spent'],
-                        'isBirthday': False,
+                        'isBirthday': is_birthday_near(g['birth_date'], today) if g['birth_date'] else False,
                         'isDeferred': False,
                         'cardCallbackDate': None,
                         'lockedBy': g['locked_by'],
