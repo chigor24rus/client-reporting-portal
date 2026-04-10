@@ -341,8 +341,22 @@ def handler(event: dict, context) -> dict:
 
                 if search_flat:
                     # Плоский формат для админа (ReportsPage)
+                    # Собираем birth_date / is_birthday по VIN из всех владельцев
+                    today_flat = date.today()
+                    cur.execute("""
+                        SELECT vin, birth_date FROM clients
+                        WHERE vin = ANY(%s) AND birth_date IS NOT NULL
+                    """, (found_vins,))
+                    vin_bd: dict = {}  # vin -> {'birth_date', 'is_birthday'}
+                    for bd_row in cur.fetchall():
+                        v, bd = bd_row['vin'], bd_row['birth_date']
+                        near = is_birthday_near(bd, today_flat)
+                        if v not in vin_bd or (near and not vin_bd[v]['is_birthday']):
+                            vin_bd[v] = {'birth_date': bd, 'is_birthday': near}
+
                     clients_flat = []
                     for r in rows:
+                        meta_bd = vin_bd.get(r['vin'], {})
                         clients_flat.append({
                             'id': str(r['id']),
                             'name': r['name'],
@@ -355,7 +369,41 @@ def handler(event: dict, context) -> dict:
                             'result': r['result'],
                             'isExcluded': False,
                             'isTest': False,
+                            'birthDate': meta_bd['birth_date'].strftime('%Y-%m-%d') if meta_bd.get('birth_date') else None,
+                            'isBirthday': meta_bd.get('is_birthday', False),
+                            'isNoData': False,
                         })
+
+                    # Добавляем is_no_data записи (работы которых нет в истории)
+                    cur.execute(f"""
+                        SELECT id, name, phone, vin, work, status, result
+                        FROM clients
+                        WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
+                          {test_filter_no_alias}
+                          AND vin = ANY(%s)
+                    """, (found_vins,))
+                    existing_works = {(r['vin'], r['work']) for r in rows}
+                    for r in cur.fetchall():
+                        if (r['vin'], r['work']) in existing_works:
+                            continue
+                        meta_bd = vin_bd.get(r['vin'], {})
+                        clients_flat.append({
+                            'id': str(r['id']),
+                            'name': r['name'],
+                            'phone': r['phone'],
+                            'vin': r['vin'],
+                            'work': r['work'],
+                            'workDate': None,
+                            'masterId': None,
+                            'status': r['status'],
+                            'result': r['result'],
+                            'isExcluded': False,
+                            'isTest': False,
+                            'birthDate': meta_bd['birth_date'].strftime('%Y-%m-%d') if meta_bd.get('birth_date') else None,
+                            'isBirthday': meta_bd.get('is_birthday', False),
+                            'isNoData': True,
+                        })
+
                     return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients_flat}, ensure_ascii=False)}
 
                 # Формат карточек для мастера (DashboardPage) — группируем по VIN

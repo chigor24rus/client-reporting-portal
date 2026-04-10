@@ -7,6 +7,12 @@ import type { Client } from '@/data/mockData';
 
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
+type SearchClient = Client & {
+  isBirthday?: boolean;
+  birthDate?: string | null;
+  isNoData?: boolean;
+};
+
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
 // 2_* попадают в повторную обработку только если статус pending (частичная запись с датой созвона)
 const SUMMARY_RESULTS = ['1', '2_oil', '2_brake', '2_gearbox', '2_coolant', '7', '9', '10'];
@@ -77,7 +83,7 @@ export default function ReportsPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Client[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchClient[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [resetting, setResetting] = useState<string | null>(null);
@@ -145,7 +151,7 @@ export default function ReportsPage() {
       setSearchLoading(true);
       const { status, data } = await apiSearchClients(q, true);
       if (status === 200) {
-        const raw = (data as { clients: Client[] }).clients;
+        const raw = (data as { clients: SearchClient[] }).clients;
         setSearchResults(raw || []);
       }
       setSearchLoading(false);
@@ -160,6 +166,12 @@ export default function ReportsPage() {
   function getResultLabel(result: string | null) {
     if (!result) return '—';
     return CALL_RESULTS.find(r => r.value === result)?.label || result;
+  }
+
+  function formatBirthday(birthDate: string | null | undefined) {
+    if (!birthDate) return null;
+    const d = new Date(birthDate);
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
   }
 
   function getWorkLabel(work: string) {
@@ -329,13 +341,30 @@ export default function ReportsPage() {
                           className={`cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
                           onClick={() => handleExpandRow(c.id, c.result)}
                         >
-                          <td className="text-foreground font-medium">{c.name}</td>
+                          <td className="text-foreground font-medium">
+                            <div className="flex flex-col gap-0.5">
+                              <span>{c.name}</span>
+                              {c.isBirthday && (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-medium">
+                                  <Icon name="Cake" size={11} />
+                                  {formatBirthday(c.birthDate)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="font-mono text-xs">{c.phone}</td>
                           <td className="font-mono text-xs">{c.vin}</td>
                           <td>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
-                              {getWorkLabel(c.work)}
-                            </span>
+                            {c.isNoData ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-destructive/10 text-xs text-destructive border border-destructive/20">
+                                <Icon name="AlertCircle" size={11} />
+                                Нет данных — предложите!
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
+                                {getWorkLabel(c.work)}
+                              </span>
+                            )}
                           </td>
                           <td className="text-xs text-muted-foreground font-mono">
                             {c.workDate ? new Date(c.workDate).toLocaleDateString('ru-RU') : '—'}
