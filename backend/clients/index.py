@@ -312,81 +312,33 @@ def handler(event: dict, context) -> dict:
                     LEFT JOIN users u ON u.id = c.locked_by
                     WHERE c.is_excluded = FALSE
                       AND c.vin != 'NO_VIN'
+                      AND c.is_no_data = FALSE
                       {test_filter}
                       AND (
                           LOWER(c.name) LIKE %s
                           OR LOWER(c.phone) LIKE %s
                           OR LOWER(c.vin) LIKE %s
                       )
-                    ORDER BY c.vin, c.work, c.work_date DESC
+                    ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                 """, (q, q, q))
                 rows = cur.fetchall()
 
-                today = date.today()
-                groups: dict = {}
+                clients_flat = []
                 for r in rows:
-                    phone = r['phone'] or r['name']
-                    if phone not in groups:
-                        groups[phone] = {
-                            'phone': r['phone'],
-                            'name': r['name'],
-                            'works': [],
-                            'min_urgency': float('inf'),
-                            'birth_date': r['birth_date'],
-                            'total_spent': float(r['total_spent']) if r['total_spent'] else None,
-                            'is_birthday': False,
-                            'is_deferred': False,
-                            'callback_date': None,
-                            'locked_by': str(r['locked_by']) if r['locked_by'] else None,
-                            'locked_at': r['locked_at'].isoformat() if r['locked_at'] else None,
-                            'locked_by_name': r['locked_by_name'] if r['locked_by_name'] else None,
-                        }
-                    work = r['work']
-                    min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
-                    work_date = r['work_date']
-                    age_months = months_diff(work_date, today) if work_date else 0
-                    is_upcoming = min_m > 0 and age_months < (min_m - UPCOMING_MONTHS)
-                    next_service = work_date + timedelta(days=int(min_m * 30.44)) if work_date and min_m else work_date
-                    urgency_seconds = abs((today - next_service).total_seconds()) if next_service else 0
-                    groups[phone]['works'].append({
+                    clients_flat.append({
                         'id': str(r['id']),
+                        'name': r['name'],
+                        'phone': r['phone'],
                         'vin': r['vin'],
-                        'work': work,
-                        'workDate': work_date.strftime('%Y-%m-%d') if work_date else None,
-                        'mileage': r['mileage'],
-                        'orderNumber': r['order_number'],
+                        'work': r['work'],
+                        'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
+                        'masterId': str(r['locked_by']) if r['locked_by'] else None,
                         'status': r['status'],
                         'result': r['result'],
-                        'resultNote': r['result_note'],
-                        'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
-                        'isUpcoming': is_upcoming,
-                        'urgencySeconds': urgency_seconds,
-                        'ageMonths': round(age_months, 1),
-                        'nextServiceDate': next_service.strftime('%Y-%m-%d') if next_service else None,
+                        'isExcluded': False,
+                        'isTest': False,
                     })
-                    if not is_upcoming:
-                        groups[phone]['min_urgency'] = min(groups[phone]['min_urgency'], urgency_seconds)
-
-                result = []
-                for g in sorted(groups.values(), key=lambda g: g['min_urgency']):
-                    works_sorted = sorted(g['works'], key=lambda w: (w['isUpcoming'], w['urgencySeconds']))
-                    statuses = [w['status'] for w in works_sorted if not w['isUpcoming']]
-                    card_status = 'pending' if not statuses or any(s == 'pending' for s in statuses) else 'done'
-                    result.append({
-                        'phone': g['phone'],
-                        'name': g['name'],
-                        'works': works_sorted,
-                        'status': card_status,
-                        'birthDate': g['birth_date'].strftime('%Y-%m-%d') if g['birth_date'] else None,
-                        'totalSpent': g['total_spent'],
-                        'isBirthday': False,
-                        'isDeferred': False,
-                        'cardCallbackDate': None,
-                        'lockedBy': g['locked_by'],
-                        'lockedAt': g['locked_at'],
-                        'lockedByName': g['locked_by_name'],
-                    })
-                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients_flat}, ensure_ascii=False)}
 
             if include_all:
                 # Только поля нужные для поиска и таблицы отчётов — минимальный набор
