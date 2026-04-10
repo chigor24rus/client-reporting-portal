@@ -1,8 +1,9 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import Icon from '@/components/ui/icon';
 import { CALL_RESULTS, WORK_INTERVALS, WORK_RESULT_MAP } from '@/data/mockData';
-import { apiResetClient } from '@/lib/api';
+import { apiResetClient, apiSearchClients } from '@/lib/api';
+import type { Client } from '@/data/mockData';
 
 type ReportTab = 'followup' | 'summary' | 'excluded' | 'search';
 
@@ -76,6 +77,9 @@ export default function ReportsPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Client[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [resetting, setResetting] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editResult, setEditResult] = useState('');
@@ -130,26 +134,23 @@ export default function ReportsPage() {
     [clients]
   );
 
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q || q.length < 2) return [];
-
-    const matched = clients.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      (c.vin && c.vin.toLowerCase().includes(q))
-    );
-
-    // Оставляем только самую свежую запись по каждой связке (vin + work)
-    const latestMap = new Map<string, typeof matched[0]>();
-    for (const c of matched) {
-      const key = `${c.vin}__${c.work}`;
-      const existing = latestMap.get(key);
-      if (!existing || (c.workDate && c.workDate > existing.workDate)) {
-        latestMap.set(key, c);
-      }
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || q.length < 2) {
+      setSearchResults([]);
+      return;
     }
-    return Array.from(latestMap.values());
-  }, [clients, searchQuery]);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      const { status, data } = await apiSearchClients(q);
+      if (status === 200) {
+        const raw = (data as { clients: Client[] }).clients;
+        setSearchResults(raw || []);
+      }
+      setSearchLoading(false);
+    }, 400);
+  }, [searchQuery]);
 
   function getMasterName(masterId: string | null) {
     if (!masterId) return '—';
@@ -283,14 +284,21 @@ export default function ReportsPage() {
             <p className="text-sm text-muted-foreground text-center py-4">Введите минимум 2 символа</p>
           )}
 
-          {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+          {searchLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              <Icon name="Loader2" size={24} className="mx-auto mb-2 animate-spin opacity-60" />
+              <p className="text-sm">Ищем...</p>
+            </div>
+          )}
+
+          {!searchLoading && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Icon name="UserX" size={36} className="mx-auto mb-3 opacity-40" />
               <p className="text-sm">Клиент не найден в базе данных</p>
             </div>
           )}
 
-          {searchResults.length > 0 && (
+          {!searchLoading && searchResults.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full data-table">
                 <thead>

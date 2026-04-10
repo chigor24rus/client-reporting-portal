@@ -63,12 +63,12 @@ def handler(event: dict, context) -> dict:
     qs = event.get('queryStringParameters') or {}
     client_id = qs.get('id')
 
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
+    conn = None
     LOCK_TIMEOUT_MINUTES = 2
 
     try:
+        conn = get_conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Сбрасываем устаревшие блокировки (старше LOCK_TIMEOUT_MINUTES минут)
         cur.execute(
             "UPDATE clients SET locked_by = NULL, locked_at = NULL WHERE locked_at < NOW() - INTERVAL '%s minutes'",
@@ -851,4 +851,5 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 500, 'headers': CORS, 'body': json.dumps({'error': str(e)}, ensure_ascii=False)}
 
     finally:
-        conn.close()
+        if conn:
+            conn.close()

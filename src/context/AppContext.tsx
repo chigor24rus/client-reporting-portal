@@ -167,9 +167,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshClients = useCallback(async () => {
     setLoadingClients(true);
-    const params = user?.role === 'admin'
-      ? { include_all: 'true' }
-      : user?.id ? { user_id: user.id } : undefined;
+    // Админ не грузит весь список — поиск идёт через отдельный API
+    if (user?.role === 'admin') {
+      setClients([]);
+      setClientCards([]);
+      setLoadingClients(false);
+      return;
+    }
+    const params = user?.id ? { user_id: user.id } : undefined;
     let { status, data } = await apiGetClients(params);
     if (status !== 200) {
       await new Promise(r => setTimeout(r, 2000));
@@ -178,36 +183,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (status === 200) {
       const raw = (data as { clients: Record<string, unknown>[] }).clients;
       if (raw.length > 0) {
-        if (user?.role === 'master') {
-          // Новый формат: карточки с массивом works
-          setClientCards(raw as unknown as ClientCard[]);
-          setClients([]);
-        } else {
-          // Для админа — плоский список (минимальные поля)
-          setClients(raw.map((c: Record<string, unknown>) => ({
-            id: String(c.id),
-            name: String(c.name),
-            phone: String(c.phone || ''),
-            vin: String(c.vin),
-            work: String(c.work),
-            workDate: String(c.workDate || ''),
-            mileage: 0,
-            orderNumber: '',
-            masterId: c.masterId ? String(c.masterId) : null,
-            status: String(c.status) as 'pending' | 'done',
-            result: c.result ? String(c.result) : null,
-            resultNote: null,
-            callbackDate: null,
-            isExcluded: Boolean(c.isExcluded),
-            birthDate: null,
-            totalSpent: null,
-            isTest: Boolean(c.isTest),
-          })));
-          setClientCards([]);
-        }
+        setClientCards(raw as unknown as ClientCard[]);
+        setClients([]);
       } else {
-        setClients(user?.role === 'admin' ? MOCK_CLIENTS : []);
         setClientCards([]);
+        setClients([]);
       }
     }
     setLoadingClients(false);
