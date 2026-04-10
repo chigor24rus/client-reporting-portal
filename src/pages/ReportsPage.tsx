@@ -356,10 +356,15 @@ export default function ReportsPage() {
                           <td className="font-mono text-xs">{c.vin}</td>
                           <td>
                             {c.isNoData ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-destructive/10 text-xs text-destructive border border-destructive/20">
-                                <Icon name="AlertCircle" size={11} />
-                                Нет данных — предложите!
-                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
+                                  {getWorkLabel(c.work)}
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-xs text-destructive">
+                                  <Icon name="AlertCircle" size={10} />
+                                  Нет данных — предложите!
+                                </span>
+                              </div>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded bg-secondary text-xs text-foreground border border-border">
                                 {getWorkLabel(c.work)}

@@ -372,12 +372,12 @@ def handler(event: dict, context) -> dict:
 
                     clients_flat = []
                     for r in rows:
-                        owner = vin_owner.get(r['vin'], {})
-                        bd = owner.get('birth_date')
+                        vin_bd_info = vin_owner.get(r['vin'], {})
+                        bd = vin_bd_info.get('birth_date')
                         clients_flat.append({
                             'id': str(r['id']),
-                            'name': owner.get('name', r['name']),
-                            'phone': owner.get('phone', r['phone']),
+                            'name': r['name'],       # реальное имя из записи
+                            'phone': r['phone'],     # реальный телефон из записи
                             'vin': r['vin'],
                             'work': r['work'],
                             'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
@@ -387,13 +387,14 @@ def handler(event: dict, context) -> dict:
                             'isExcluded': False,
                             'isTest': False,
                             'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                            'isBirthday': owner.get('is_birthday', False),
+                            'isBirthday': vin_bd_info.get('is_birthday', False),
                             'isNoData': False,
                         })
 
                     # Добавляем is_no_data записи (работы которых нет в истории)
+                    # Берём имя актуального владельца VIN
                     cur.execute(f"""
-                        SELECT id, vin, work, status, result
+                        SELECT id, name, phone, vin, work, status, result
                         FROM clients
                         WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
                           {test_filter_no_alias}
@@ -403,12 +404,14 @@ def handler(event: dict, context) -> dict:
                     for r in cur.fetchall():
                         if (r['vin'], r['work']) in existing_works:
                             continue
+                        vin_bd_info = vin_owner.get(r['vin'], {})
+                        bd = vin_bd_info.get('birth_date')
+                        # Для "нет данных" показываем актуального владельца VIN
                         owner = vin_owner.get(r['vin'], {})
-                        bd = owner.get('birth_date')
                         clients_flat.append({
                             'id': str(r['id']),
-                            'name': owner.get('name', ''),
-                            'phone': owner.get('phone', ''),
+                            'name': owner.get('name', r['name']),
+                            'phone': owner.get('phone', r['phone']),
                             'vin': r['vin'],
                             'work': r['work'],
                             'workDate': None,
