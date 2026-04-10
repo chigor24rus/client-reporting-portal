@@ -365,30 +365,14 @@ def handler(event: dict, context) -> dict:
                         ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                     """, (found_phones_list,))
                     own_rows = cur.fetchall()
-                    own_works = {(r['vin'], r['work']) for r in own_rows}
-
-                    # Работы других владельцев тех же VIN
-                    cur.execute(f"""
-                        SELECT DISTINCT ON (c.vin, c.work)
-                               c.id, c.name, c.phone, c.vin, c.work, c.work_date,
-                               c.status, c.result, c.birth_date, c.locked_by
-                        FROM clients c
-                        WHERE c.is_excluded = FALSE AND c.vin != 'NO_VIN'
-                          AND c.is_no_data = FALSE {test_filter}
-                          AND c.vin = ANY(%s)
-                          AND (c.phone IS NULL OR c.phone != ALL(%s))
-                        ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
-                    """, (found_vins_flat, found_phones_list))
-                    other_rows = [r for r in cur.fetchall() if (r['vin'], r['work']) not in own_works]
 
                     clients_flat = []
-                    all_flat_rows = [(r, False) for r in own_rows] + [(r, True) for r in other_rows]
-                    for r, is_other in all_flat_rows:
+                    for r in own_rows:
                         vbd = vin_birthday.get(r['vin'], {})
                         bd = vbd.get('birth_date')
-                        # Прошлый владелец = либо запись чужая, либо этот телефон не актуальный владелец VIN
+                        # Прошлый владелец = этот телефон не актуальный владелец VIN
                         actual_phone = vin_actual.get(r['vin'])
-                        is_former = is_other or bool(actual_phone and r['phone'] != actual_phone)
+                        is_former = bool(actual_phone and r['phone'] != actual_phone)
                         clients_flat.append({
                             'id': str(r['id']),
                             'name': r['name'],
