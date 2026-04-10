@@ -361,15 +361,28 @@ def handler(event: dict, context) -> dict:
                 # Формат карточек для мастера (DashboardPage) — группируем по VIN
                 today = date.today()
 
-                # Подтягиваем birth_date и total_spent из любой записи по VIN (могут быть у другого владельца)
+                # Подтягиваем все birth_date по VIN — ищем именинника среди всех владельцев
                 cur.execute("""
-                    SELECT DISTINCT ON (vin) vin, birth_date, total_spent
+                    SELECT vin, birth_date, total_spent, name
                     FROM clients
                     WHERE vin = ANY(%s) AND birth_date IS NOT NULL
-                    ORDER BY vin, total_spent DESC NULLS LAST
                 """, (found_vins,))
-                vin_meta = {r['vin']: {'birth_date': r['birth_date'], 'total_spent': float(r['total_spent']) if r['total_spent'] else None}
-                            for r in cur.fetchall()}
+                vin_meta: dict = {}
+                for row in cur.fetchall():
+                    v = row['vin']
+                    bd = row['birth_date']
+                    ts = float(row['total_spent']) if row['total_spent'] else None
+                    if v not in vin_meta:
+                        vin_meta[v] = {'birth_date': bd, 'total_spent': ts, 'is_birthday': is_birthday_near(bd, today)}
+                    else:
+                        # Приоритет — именинник сегодня
+                        if is_birthday_near(bd, today) and not vin_meta[v]['is_birthday']:
+                            vin_meta[v]['birth_date'] = bd
+                            vin_meta[v]['is_birthday'] = True
+                        # Иначе берём наибольший total_spent
+                        elif not vin_meta[v]['is_birthday'] and ts and ts > (vin_meta[v]['total_spent'] or 0):
+                            vin_meta[v]['birth_date'] = bd
+                            vin_meta[v]['total_spent'] = ts
 
                 groups: dict = {}
                 for r in rows:
@@ -383,7 +396,7 @@ def handler(event: dict, context) -> dict:
                             'min_urgency': float('inf'),
                             'birth_date': meta.get('birth_date') or r['birth_date'],
                             'total_spent': meta.get('total_spent') or (float(r['total_spent']) if r['total_spent'] else None),
-                            'is_birthday': False,
+                            'is_birthday': meta.get('is_birthday', False),
                             'is_deferred': False,
                             'callback_date': None,
                             'locked_by': str(r['locked_by']) if r['locked_by'] else None,
@@ -428,7 +441,7 @@ def handler(event: dict, context) -> dict:
                         'status': card_status,
                         'birthDate': g['birth_date'].strftime('%Y-%m-%d') if g['birth_date'] else None,
                         'totalSpent': g['total_spent'],
-                        'isBirthday': is_birthday_near(g['birth_date'], today) if g['birth_date'] else False,
+                        'isBirthday': g['is_birthday'],
                         'isDeferred': False,
                         'cardCallbackDate': None,
                         'lockedBy': g['locked_by'],
