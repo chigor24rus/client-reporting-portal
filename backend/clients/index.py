@@ -344,7 +344,16 @@ def handler(event: dict, context) -> dict:
                         if v not in vin_birthday or (near and not vin_birthday[v]['is_birthday']):
                             vin_birthday[v] = {'birth_date': bd, 'is_birthday': near}
 
-                    # Берём записи самих найденных клиентов (по телефону)
+                    # Актуальный владелец каждого VIN = у кого самая свежая work_date
+                    cur.execute("""
+                        SELECT DISTINCT ON (vin) vin, phone
+                        FROM clients
+                        WHERE vin = ANY(%s) AND is_excluded = FALSE AND is_no_data = FALSE
+                        ORDER BY vin, work_date DESC NULLS LAST
+                    """, (found_vins_flat,))
+                    vin_actual: dict = {r['vin']: r['phone'] for r in cur.fetchall()}
+
+                    # Все работы по найденным клиентам (по телефону)
                     cur.execute(f"""
                         SELECT DISTINCT ON (c.vin, c.work)
                                c.id, c.name, c.phone, c.vin, c.work, c.work_date,
@@ -358,7 +367,7 @@ def handler(event: dict, context) -> dict:
                     own_rows = cur.fetchall()
                     own_works = {(r['vin'], r['work']) for r in own_rows}
 
-                    # Для тех же VIN — работы других владельцев (прошлые)
+                    # Работы других владельцев тех же VIN
                     cur.execute(f"""
                         SELECT DISTINCT ON (c.vin, c.work)
                                c.id, c.name, c.phone, c.vin, c.work, c.work_date,
@@ -373,9 +382,13 @@ def handler(event: dict, context) -> dict:
                     other_rows = [r for r in cur.fetchall() if (r['vin'], r['work']) not in own_works]
 
                     clients_flat = []
-                    for r in own_rows:
+                    all_flat_rows = [(r, False) for r in own_rows] + [(r, True) for r in other_rows]
+                    for r, is_other in all_flat_rows:
                         vbd = vin_birthday.get(r['vin'], {})
                         bd = vbd.get('birth_date')
+                        # Прошлый владелец = либо запись чужая, либо этот телефон не актуальный владелец VIN
+                        actual_phone = vin_actual.get(r['vin'])
+                        is_former = is_other or bool(actual_phone and r['phone'] != actual_phone)
                         clients_flat.append({
                             'id': str(r['id']),
                             'name': r['name'],
@@ -391,27 +404,7 @@ def handler(event: dict, context) -> dict:
                             'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
                             'isBirthday': vbd.get('is_birthday', False),
                             'isNoData': False,
-                            'isFormerOwner': False,
-                        })
-                    for r in other_rows:
-                        vbd = vin_birthday.get(r['vin'], {})
-                        bd = vbd.get('birth_date')
-                        clients_flat.append({
-                            'id': str(r['id']),
-                            'name': r['name'],
-                            'phone': r['phone'],
-                            'vin': r['vin'],
-                            'work': r['work'],
-                            'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
-                            'masterId': str(r['locked_by']) if r['locked_by'] else None,
-                            'status': r['status'],
-                            'result': r['result'],
-                            'isExcluded': False,
-                            'isTest': False,
-                            'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                            'isBirthday': vbd.get('is_birthday', False),
-                            'isNoData': False,
-                            'isFormerOwner': True,
+                            'isFormerOwner': is_former,
                         })
 
                     # is_no_data записи — только для найденных клиентов (по телефону)
