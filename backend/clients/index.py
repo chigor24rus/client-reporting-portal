@@ -360,17 +360,16 @@ def handler(event: dict, context) -> dict:
                             'isFormerOwner': is_former,
                         })
 
-                    # Добавляем is_no_data записи для найденных клиентов
+                    # Добавляем is_no_data записи только для найденных клиентов (по телефону)
                     found_phones = list({r['phone'] for r in flat_rows if r['phone']})
-                    found_vins_flat = list({r['vin'] for r in flat_rows})
-                    if found_phones or found_vins_flat:
+                    if found_phones:
                         cur.execute(f"""
                             SELECT id, name, phone, vin, work, status, result, birth_date
                             FROM clients
                             WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
                               {test_filter_no_alias}
-                              AND (phone = ANY(%s) OR vin = ANY(%s))
-                        """, (found_phones, found_vins_flat))
+                              AND phone = ANY(%s)
+                        """, (found_phones,))
                         existing_works = {(r['vin'], r['work']) for r in flat_rows}
                         for r in cur.fetchall():
                             if (r['vin'], r['work']) in existing_works:
