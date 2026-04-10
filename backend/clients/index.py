@@ -389,6 +389,7 @@ def handler(event: dict, context) -> dict:
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}
 
             if include_all:
+                print('DEBUG: starting include_all query')
                 cur.execute("""
                     SELECT DISTINCT ON (c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -398,7 +399,9 @@ def handler(event: dict, context) -> dict:
                     WHERE c.is_test = FALSE
                     ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                 """)
+                print('DEBUG: query done, fetching...')
                 rows = cur.fetchall()
+                print(f'DEBUG: fetched {len(rows)} rows')
                 clients = []
                 for r in rows:
                     clients.append({
@@ -420,7 +423,10 @@ def handler(event: dict, context) -> dict:
                         'totalSpent': float(r['total_spent']) if r['total_spent'] else None,
                         'isTest': bool(r['is_test']),
                     })
-                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients}, ensure_ascii=False)}
+                print(f'DEBUG: built {len(clients)} client objects, serializing...')
+                body_str = json.dumps({'clients': clients}, ensure_ascii=False)
+                print(f'DEBUG: json size = {len(body_str)} bytes')
+                return {'statusCode': 200, 'headers': CORS, 'body': body_str}
 
             # ─── Мастер: работы + именинники ────────────────────────────────
             today = date.today()

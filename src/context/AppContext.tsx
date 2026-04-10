@@ -170,7 +170,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const params = user?.role === 'admin'
       ? { include_all: 'true' }
       : user?.id ? { user_id: user.id } : undefined;
-    const { status, data } = await apiGetClients(params);
+    let { status, data } = await apiGetClients(params);
+    if (status !== 200) {
+      await new Promise(r => setTimeout(r, 2000));
+      ({ status, data } = await apiGetClients(params));
+    }
     if (status === 200) {
       const raw = (data as { clients: Record<string, unknown>[] }).clients;
       if (raw.length > 0) {
