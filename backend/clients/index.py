@@ -389,19 +389,16 @@ def handler(event: dict, context) -> dict:
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': result}, ensure_ascii=False)}
 
             if include_all:
-                print('DEBUG: starting include_all query')
+                # Только поля нужные для поиска и таблицы отчётов — минимальный набор
                 cur.execute("""
                     SELECT DISTINCT ON (c.vin, c.work)
-                           c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
-                           c.order_number, c.master_id, c.status, c.result, c.result_note,
-                           c.callback_date, c.is_excluded, c.birth_date, c.total_spent, c.is_test
+                           c.id, c.name, c.phone, c.vin, c.work, c.work_date,
+                           c.master_id, c.status, c.result, c.is_excluded, c.is_test
                     FROM clients c
                     WHERE c.is_test = FALSE
                     ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                 """)
-                print('DEBUG: query done, fetching...')
                 rows = cur.fetchall()
-                print(f'DEBUG: fetched {len(rows)} rows')
                 clients = []
                 for r in rows:
                     clients.append({
@@ -411,22 +408,13 @@ def handler(event: dict, context) -> dict:
                         'vin': r['vin'],
                         'work': r['work'],
                         'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
-                        'mileage': r['mileage'],
-                        'orderNumber': r['order_number'],
                         'masterId': str(r['master_id']) if r['master_id'] else None,
                         'status': r['status'],
                         'result': r['result'],
-                        'resultNote': r['result_note'],
-                        'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
                         'isExcluded': r['is_excluded'],
-                        'birthDate': r['birth_date'].strftime('%Y-%m-%d') if r['birth_date'] else None,
-                        'totalSpent': float(r['total_spent']) if r['total_spent'] else None,
                         'isTest': bool(r['is_test']),
                     })
-                print(f'DEBUG: built {len(clients)} client objects, serializing...')
-                body_str = json.dumps({'clients': clients}, ensure_ascii=False)
-                print(f'DEBUG: json size = {len(body_str)} bytes')
-                return {'statusCode': 200, 'headers': CORS, 'body': body_str}
+                return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients}, ensure_ascii=False)}
 
             # ─── Мастер: работы + именинники ────────────────────────────────
             today = date.today()

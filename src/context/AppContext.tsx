@@ -183,24 +183,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setClientCards(raw as unknown as ClientCard[]);
           setClients([]);
         } else {
-          // Для админа — плоский список
+          // Для админа — плоский список (минимальные поля)
           setClients(raw.map((c: Record<string, unknown>) => ({
             id: String(c.id),
             name: String(c.name),
             phone: String(c.phone || ''),
             vin: String(c.vin),
             work: String(c.work),
-            workDate: String(c.workDate),
-            mileage: Number(c.mileage) || 0,
-            orderNumber: String(c.orderNumber || ''),
+            workDate: String(c.workDate || ''),
+            mileage: 0,
+            orderNumber: '',
             masterId: c.masterId ? String(c.masterId) : null,
             status: String(c.status) as 'pending' | 'done',
             result: c.result ? String(c.result) : null,
-            resultNote: c.resultNote ? String(c.resultNote) : null,
-            callbackDate: c.callbackDate ? String(c.callbackDate) : null,
+            resultNote: null,
+            callbackDate: null,
             isExcluded: Boolean(c.isExcluded),
-            birthDate: c.birthDate ? String(c.birthDate) : null,
-            totalSpent: c.totalSpent ? Number(c.totalSpent) : null,
+            birthDate: null,
+            totalSpent: null,
             isTest: Boolean(c.isTest),
           })));
           setClientCards([]);
