@@ -307,46 +307,58 @@ def handler(event: dict, context) -> dict:
                 if search_flat:
                     today_flat = date.today()
 
-                    # Шаг 1: находим VIN по запросу
+                    # Определяем — ищут по VIN или по имени/телефону
+                    search_by_vin = len(search_query) >= 6 and search_query.upper() == search_query.upper() and any(
+                        search_query.lower() in r['vin'].lower()
+                        for r in (cur.execute(f"""
+                            SELECT DISTINCT vin FROM clients
+                            WHERE is_excluded = FALSE AND vin != 'NO_VIN' {test_filter_no_alias}
+                              AND LOWER(vin) LIKE %s LIMIT 1
+                        """, (q,)) or [])
+                    ) if False else None  # не используем, проще проверить ниже
+
+                    # Находим телефоны/VIN найденных людей
                     cur.execute(f"""
-                        SELECT DISTINCT vin FROM clients
+                        SELECT DISTINCT phone, vin FROM clients
                         WHERE is_excluded = FALSE AND vin != 'NO_VIN' {test_filter_no_alias}
                           AND (LOWER(name) LIKE %s OR LOWER(phone) LIKE %s OR LOWER(vin) LIKE %s)
                     """, (q, q, q))
-                    found_vins_flat = [r['vin'] for r in cur.fetchall()]
-
-                    if not found_vins_flat:
+                    matched = cur.fetchall()
+                    if not matched:
                         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': []}, ensure_ascii=False)}
 
-                    # Шаг 2: актуальный владелец каждого VIN (последняя работа)
-                    cur.execute("""
-                        SELECT DISTINCT ON (vin) vin, phone, name, birth_date
-                        FROM clients
-                        WHERE vin = ANY(%s) AND is_excluded = FALSE AND is_no_data = FALSE
-                        ORDER BY vin, work_date DESC NULLS LAST
-                    """, (found_vins_flat,))
-                    vin_owner_flat: dict = {}
-                    for ow in cur.fetchall():
-                        bd = ow['birth_date']
-                        vin_owner_flat[ow['vin']] = {
-                            'phone': ow['phone'],
-                            'name': ow['name'],
-                            'birth_date': bd,
-                            'is_birthday': is_birthday_near(bd, today_flat) if bd else False,
-                        }
+                    found_phones_set = {r['phone'] for r in matched if r['phone']}
+                    found_vins_set = {r['vin'] for r in matched}
+                    found_phones_list = list(found_phones_set)
+                    found_vins_flat = list(found_vins_set)
 
-                    # Среди всех владельцев VIN ищем именинника
+                    # Собираем birth_date по VIN (ищем именинника среди всех владельцев)
                     cur.execute("""
-                        SELECT DISTINCT vin, birth_date FROM clients
+                        SELECT vin, birth_date FROM clients
                         WHERE vin = ANY(%s) AND birth_date IS NOT NULL
                     """, (found_vins_flat,))
+                    vin_birthday: dict = {}  # vin -> {'birth_date', 'is_birthday'}
                     for bd_row in cur.fetchall():
                         v, bd = bd_row['vin'], bd_row['birth_date']
-                        if v in vin_owner_flat and is_birthday_near(bd, today_flat) and not vin_owner_flat[v]['is_birthday']:
-                            vin_owner_flat[v]['birth_date'] = bd
-                            vin_owner_flat[v]['is_birthday'] = True
+                        near = is_birthday_near(bd, today_flat)
+                        if v not in vin_birthday or (near and not vin_birthday[v]['is_birthday']):
+                            vin_birthday[v] = {'birth_date': bd, 'is_birthday': near}
 
-                    # Шаг 3: все работы по найденным VIN (включая другие владельцы)
+                    # Берём записи самих найденных клиентов (по телефону)
+                    cur.execute(f"""
+                        SELECT DISTINCT ON (c.vin, c.work)
+                               c.id, c.name, c.phone, c.vin, c.work, c.work_date,
+                               c.status, c.result, c.birth_date, c.locked_by
+                        FROM clients c
+                        WHERE c.is_excluded = FALSE AND c.vin != 'NO_VIN'
+                          AND c.is_no_data = FALSE {test_filter}
+                          AND c.phone = ANY(%s)
+                        ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
+                    """, (found_phones_list,))
+                    own_rows = cur.fetchall()
+                    own_works = {(r['vin'], r['work']) for r in own_rows}
+
+                    # Для тех же VIN — работы других владельцев (прошлые)
                     cur.execute(f"""
                         SELECT DISTINCT ON (c.vin, c.work)
                                c.id, c.name, c.phone, c.vin, c.work, c.work_date,
@@ -355,15 +367,15 @@ def handler(event: dict, context) -> dict:
                         WHERE c.is_excluded = FALSE AND c.vin != 'NO_VIN'
                           AND c.is_no_data = FALSE {test_filter}
                           AND c.vin = ANY(%s)
+                          AND (c.phone IS NULL OR c.phone != ALL(%s))
                         ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
-                    """, (found_vins_flat,))
-                    flat_rows = cur.fetchall()
+                    """, (found_vins_flat, found_phones_list))
+                    other_rows = [r for r in cur.fetchall() if (r['vin'], r['work']) not in own_works]
 
                     clients_flat = []
-                    for r in flat_rows:
-                        owner = vin_owner_flat.get(r['vin'], {})
-                        bd = owner.get('birth_date')
-                        is_former = bool(owner.get('phone') and r['phone'] != owner.get('phone'))
+                    for r in own_rows:
+                        vbd = vin_birthday.get(r['vin'], {})
+                        bd = vbd.get('birth_date')
                         clients_flat.append({
                             'id': str(r['id']),
                             'name': r['name'],
@@ -377,31 +389,50 @@ def handler(event: dict, context) -> dict:
                             'isExcluded': False,
                             'isTest': False,
                             'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                            'isBirthday': owner.get('is_birthday', False),
+                            'isBirthday': vbd.get('is_birthday', False),
                             'isNoData': False,
-                            'isFormerOwner': is_former,
+                            'isFormerOwner': False,
+                        })
+                    for r in other_rows:
+                        vbd = vin_birthday.get(r['vin'], {})
+                        bd = vbd.get('birth_date')
+                        clients_flat.append({
+                            'id': str(r['id']),
+                            'name': r['name'],
+                            'phone': r['phone'],
+                            'vin': r['vin'],
+                            'work': r['work'],
+                            'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
+                            'masterId': str(r['locked_by']) if r['locked_by'] else None,
+                            'status': r['status'],
+                            'result': r['result'],
+                            'isExcluded': False,
+                            'isTest': False,
+                            'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
+                            'isBirthday': vbd.get('is_birthday', False),
+                            'isNoData': False,
+                            'isFormerOwner': True,
                         })
 
-                    # Шаг 4: is_no_data записи — только для актуального владельца VIN
-                    found_phones = list({vin_owner_flat[v]['phone'] for v in found_vins_flat if vin_owner_flat.get(v, {}).get('phone')})
-                    if found_phones:
+                    # is_no_data записи — только для найденных клиентов (по телефону)
+                    all_works_shown = {(r['vin'], r['work']) for r in own_rows}
+                    if found_phones_list:
                         cur.execute(f"""
-                            SELECT id, name, phone, vin, work, status, result, birth_date
+                            SELECT id, name, phone, vin, work, status, result
                             FROM clients
                             WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
                               {test_filter_no_alias}
                               AND phone = ANY(%s)
-                        """, (found_phones,))
-                        existing_works = {(r['vin'], r['work']) for r in flat_rows}
+                        """, (found_phones_list,))
                         for r in cur.fetchall():
-                            if (r['vin'], r['work']) in existing_works:
+                            if (r['vin'], r['work']) in all_works_shown:
                                 continue
-                            owner = vin_owner_flat.get(r['vin'], {})
-                            bd = owner.get('birth_date')
+                            vbd = vin_birthday.get(r['vin'], {})
+                            bd = vbd.get('birth_date')
                             clients_flat.append({
                                 'id': str(r['id']),
-                                'name': owner.get('name', r['name']),
-                                'phone': owner.get('phone', r['phone']),
+                                'name': r['name'],
+                                'phone': r['phone'],
                                 'vin': r['vin'],
                                 'work': r['work'],
                                 'workDate': None,
@@ -411,7 +442,7 @@ def handler(event: dict, context) -> dict:
                                 'isExcluded': False,
                                 'isTest': False,
                                 'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                                'isBirthday': owner.get('is_birthday', False),
+                                'isBirthday': vbd.get('is_birthday', False),
                                 'isNoData': True,
                                 'isFormerOwner': False,
                             })
