@@ -520,6 +520,41 @@ def handler(event: dict, context) -> dict:
                     if not is_upcoming:
                         groups[vin]['min_urgency'] = min(groups[vin]['min_urgency'], urgency_seconds)
 
+                # Добавляем is_no_data записи для найденных VIN
+                if found_vins:
+                    cur.execute(
+                        f"""SELECT id, name, phone, vin, work, status, result, result_note, callback_date
+                            FROM clients
+                            WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
+                              {test_filter_no_alias}
+                              AND vin = ANY(%s)""",
+                        (found_vins,)
+                    )
+                    existing_works_search = {(w['vin'], w['work']) for g in groups.values() for w in g['works']}
+                    for r in cur.fetchall():
+                        vin = r['vin'] or r['name']
+                        if (vin, r['work']) in existing_works_search:
+                            continue
+                        if vin not in groups:
+                            continue
+                        groups[vin]['works'].append({
+                            'id': str(r['id']),
+                            'vin': r['vin'],
+                            'work': r['work'],
+                            'workDate': None,
+                            'mileage': None,
+                            'orderNumber': None,
+                            'status': r['status'],
+                            'result': r['result'],
+                            'resultNote': r['result_note'],
+                            'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
+                            'isUpcoming': False,
+                            'isNoData': True,
+                            'urgencySeconds': 0,
+                            'ageMonths': 0,
+                            'nextServiceDate': None,
+                        })
+
                 result = []
                 for g in sorted(groups.values(), key=lambda g: g['min_urgency']):
                     works_sorted = sorted(g['works'], key=lambda w: (w['isUpcoming'], w['urgencySeconds']))
