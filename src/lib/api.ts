@@ -104,8 +104,9 @@ export async function apiGetClients(params?: { user_id?: string; status?: string
   return request('clients', `/${qs}`);
 }
 
-export async function apiSearchClients(query: string) {
-  return request('clients', `/?search=${encodeURIComponent(query)}`);
+export async function apiSearchClients(query: string, flat = false) {
+  const qs = flat ? `?search=${encodeURIComponent(query)}&flat=true` : `?search=${encodeURIComponent(query)}`;
+  return request('clients', `/${qs}`);
 }
 
 export async function apiGetMastersStats(month?: string) {

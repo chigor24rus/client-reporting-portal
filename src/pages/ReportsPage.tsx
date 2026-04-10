@@ -143,7 +143,7 @@ export default function ReportsPage() {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(async () => {
       setSearchLoading(true);
-      const { status, data } = await apiSearchClients(q);
+      const { status, data } = await apiSearchClients(q, true);
       if (status === 200) {
         const raw = (data as { clients: Client[] }).clients;
         setSearchResults(raw || []);
