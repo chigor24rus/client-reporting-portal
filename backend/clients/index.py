@@ -302,8 +302,8 @@ def handler(event: dict, context) -> dict:
             # ─── Поиск по всей базе (для мастера) ───────────────────────────
             if search_query and len(search_query) >= 2:
                 q = f'%{search_query.lower()}%'
-                cur.execute("""
-                    SELECT DISTINCT ON (c.phone, c.vin, c.work)
+                cur.execute(f"""
+                    SELECT DISTINCT ON (c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                            c.order_number, c.status, c.result, c.result_note, c.callback_date,
                            c.birth_date, c.total_spent, c.locked_by, c.locked_at,
@@ -318,7 +318,7 @@ def handler(event: dict, context) -> dict:
                           OR LOWER(c.phone) LIKE %s
                           OR LOWER(c.vin) LIKE %s
                       )
-                    ORDER BY c.phone, c.vin, c.work, c.work_date DESC
+                    ORDER BY c.vin, c.work, c.work_date DESC
                 """, (q, q, q))
                 rows = cur.fetchall()
 
@@ -390,13 +390,13 @@ def handler(event: dict, context) -> dict:
 
             if include_all:
                 cur.execute("""
-                    SELECT DISTINCT ON (c.phone, c.vin, c.work)
+                    SELECT DISTINCT ON (c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                            c.order_number, c.master_id, c.status, c.result, c.result_note,
                            c.callback_date, c.is_excluded, c.birth_date, c.total_spent, c.is_test
                     FROM clients c
                     WHERE c.is_test = FALSE
-                    ORDER BY c.phone, c.vin, c.work, c.work_date DESC
+                    ORDER BY c.vin, c.work, c.work_date DESC
                 """)
                 rows = cur.fetchall()
                 clients = []
@@ -448,10 +448,10 @@ def handler(event: dict, context) -> dict:
 
             cur.execute(f"""
                 WITH latest AS (
-                    SELECT phone, work, vin, MAX(work_date) AS max_work_date
+                    SELECT work, vin, MAX(work_date) AS max_work_date
                     FROM clients
                     WHERE is_excluded = FALSE AND is_no_data = FALSE {test_filter_no_alias}
-                    GROUP BY phone, work, vin
+                    GROUP BY work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
@@ -460,7 +460,7 @@ def handler(event: dict, context) -> dict:
                        1 AS rn
                 FROM clients c
                 LEFT JOIN users u ON u.id = c.locked_by
-                JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
+                JOIN latest l ON l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
                   AND c.is_no_data = FALSE
@@ -499,10 +499,10 @@ def handler(event: dict, context) -> dict:
             #    но должны отображаться в «Ожидают» с датой созвона
             cur.execute(f"""
                 WITH latest AS (
-                    SELECT phone, work, vin, MAX(work_date) AS max_work_date
+                    SELECT work, vin, MAX(work_date) AS max_work_date
                     FROM clients
                     WHERE is_excluded = FALSE AND is_no_data = FALSE {test_filter_no_alias}
-                    GROUP BY phone, work, vin
+                    GROUP BY work, vin
                 )
                 SELECT c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
                        c.order_number, c.status, c.result, c.result_note, c.callback_date,
@@ -511,7 +511,7 @@ def handler(event: dict, context) -> dict:
                        1 AS rn
                 FROM clients c
                 LEFT JOIN users u ON u.id = c.locked_by
-                JOIN latest l ON l.phone = c.phone AND l.work = c.work AND l.vin = c.vin
+                JOIN latest l ON l.work = c.work AND l.vin = c.vin
                                   AND c.work_date = l.max_work_date
                 WHERE c.is_excluded = FALSE
                   AND c.is_no_data = FALSE
@@ -526,14 +526,16 @@ def handler(event: dict, context) -> dict:
             # Телефоны клиентов у которых есть работы
             work_phones = {r['phone'] for r in work_rows if r['phone']}
 
-            # Группируем клиентов с работами по телефону
+            # Группируем клиентов с работами по VIN — автомобиль как единица учёта
+            # Имя и телефон берётся из самой свежей записи (MAX work_date уже обеспечен SQL)
             groups: dict = {}
             for r in work_rows:
-                phone = r['phone'] or r['name']
-                if phone not in groups:
-                    groups[phone] = {
+                vin = r['vin'] or r['name']
+                if vin not in groups:
+                    groups[vin] = {
                         'phone': r['phone'],
                         'name': r['name'],
+                        'vin': r['vin'],
                         'works': [],
                         'min_urgency': float('inf'),
                         'birth_date': r['birth_date'],
@@ -543,6 +545,12 @@ def handler(event: dict, context) -> dict:
                         'locked_at': r['locked_at'].isoformat() if r['locked_at'] else None,
                         'locked_by_name': r['locked_by_name'] if r['locked_by_name'] else None,
                     }
+                else:
+                    # Обновляем имя/телефон если эта работа свежее (берём актуального владельца)
+                    if r['work_date'] and (not groups[vin]['works'] or
+                            r['work_date'].strftime('%Y-%m-%d') > max((w['workDate'] or '') for w in groups[vin]['works'])):
+                        groups[vin]['phone'] = r['phone']
+                        groups[vin]['name'] = r['name']
 
                 work = r['work']
                 min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
@@ -553,7 +561,7 @@ def handler(event: dict, context) -> dict:
                 next_service = work_date + timedelta(days=int(min_m * 30.44))
                 urgency_seconds = abs((today - next_service).total_seconds())
 
-                groups[phone]['works'].append({
+                groups[vin]['works'].append({
                     'id': str(r['id']),
                     'vin': r['vin'],
                     'work': work,
@@ -570,13 +578,12 @@ def handler(event: dict, context) -> dict:
                     'nextServiceDate': next_service.strftime('%Y-%m-%d'),
                 })
                 if is_active:
-                    groups[phone]['min_urgency'] = min(groups[phone]['min_urgency'], urgency_seconds)
+                    groups[vin]['min_urgency'] = min(groups[vin]['min_urgency'], urgency_seconds)
 
             # Добавляем заглушки «Нет данных» — работы отсутствующие в истории по VIN
             # Берём только для клиентов у которых уже есть карточка в groups
             if groups:
-                phones_in_groups = list(groups.keys())
-                vins_in_groups = list({w['vin'] for g in groups.values() for w in g['works'] if w.get('vin')})
+                vins_in_groups = list(groups.keys())
                 if vins_in_groups:
                     cur.execute(
                         f"""SELECT id, name, phone, vin, work, status, result, result_note, callback_date
@@ -590,14 +597,14 @@ def handler(event: dict, context) -> dict:
                     )
                     no_data_rows_db = cur.fetchall()
                     for r in no_data_rows_db:
-                        phone = r['phone'] or r['name']
-                        if phone not in groups:
+                        vin = r['vin'] or r['name']
+                        if vin not in groups:
                             continue
                         # Не добавляем если такая работа уже есть в группе (реальные данные)
-                        existing_works = {w['work'] for w in groups[phone]['works']}
+                        existing_works = {w['work'] for w in groups[vin]['works']}
                         if r['work'] in existing_works:
                             continue
-                        groups[phone]['works'].append({
+                        groups[vin]['works'].append({
                             'id': str(r['id']),
                             'vin': r['vin'],
                             'work': r['work'],
@@ -616,14 +623,17 @@ def handler(event: dict, context) -> dict:
                         })
 
             # Помечаем именинников среди клиентов с работами
+            # Ищем совпадение по телефону внутри групп (группы теперь по VIN)
+            phone_to_vin = {g['phone']: vin_key for vin_key, g in groups.items() if g.get('phone')}
             for r in birthday_rows:
                 phone = r['phone']
                 if phone and is_birthday_near(r['birth_date'], today):
-                    if phone in groups:
-                        groups[phone]['is_birthday'] = True
-                        groups[phone]['birth_date'] = r['birth_date']
+                    vin_key = phone_to_vin.get(phone)
+                    if vin_key and vin_key in groups:
+                        groups[vin_key]['is_birthday'] = True
+                        groups[vin_key]['birth_date'] = r['birth_date']
                     else:
-                        # Именинник без работ — добавляем отдельную карточку
+                        # Именинник без работ — добавляем отдельную карточку по телефону
                         groups[phone] = {
                             'phone': r['phone'],
                             'name': r['name'],
@@ -635,48 +645,46 @@ def handler(event: dict, context) -> dict:
                         }
 
             # Добавляем отложенных клиентов — отдельные карточки с isDeferred=True
-            deferred_phones = {r['phone'] for r in deferred_rows if r['phone']}
             for r in deferred_rows:
-                phone = r['phone'] or r['name']
-                if phone in groups:
+                vin = r['vin'] or r['name']
+                if vin in groups:
                     # Уже есть в основном списке (другая работа не отложена) — не дублируем
                     continue
-                if phone not in groups:
-                    work = r['work']
-                    min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
-                    work_date = r['work_date']
-                    age_months = months_diff(work_date, today)
-                    is_active = age_months >= min_m
-                    next_service = work_date + timedelta(days=int(min_m * 30.44))
-                    urgency_seconds = abs((today - next_service).total_seconds())
-                    if phone not in groups:
-                        groups[phone] = {
-                            'phone': r['phone'],
-                            'name': r['name'],
-                            'works': [],
-                            'min_urgency': float('inf'),
-                            'birth_date': r['birth_date'],
-                            'total_spent': float(r['total_spent']) if r['total_spent'] else None,
-                            'is_birthday': False,
-                            'is_deferred': True,
-                            'callback_date': r['callback_date'],
-                        }
-                    groups[phone]['works'].append({
-                        'id': str(r['id']),
-                        'vin': r['vin'],
-                        'work': work,
-                        'workDate': work_date.strftime('%Y-%m-%d'),
-                        'mileage': r['mileage'],
-                        'orderNumber': r['order_number'],
-                        'status': r['status'],
-                        'result': r['result'],
-                        'resultNote': r['result_note'],
-                        'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
-                        'isUpcoming': not is_active,
-                        'urgencySeconds': urgency_seconds,
-                        'ageMonths': round(age_months, 1),
-                        'nextServiceDate': next_service.strftime('%Y-%m-%d'),
-                    })
+                work = r['work']
+                min_m, max_m = WORK_INTERVALS.get(work, (0, 0))
+                work_date = r['work_date']
+                age_months = months_diff(work_date, today)
+                is_active = age_months >= min_m
+                next_service = work_date + timedelta(days=int(min_m * 30.44))
+                urgency_seconds = abs((today - next_service).total_seconds())
+                groups[vin] = {
+                    'phone': r['phone'],
+                    'name': r['name'],
+                    'vin': r['vin'],
+                    'works': [],
+                    'min_urgency': float('inf'),
+                    'birth_date': r['birth_date'],
+                    'total_spent': float(r['total_spent']) if r['total_spent'] else None,
+                    'is_birthday': False,
+                    'is_deferred': True,
+                    'callback_date': r['callback_date'],
+                }
+                groups[vin]['works'].append({
+                    'id': str(r['id']),
+                    'vin': r['vin'],
+                    'work': work,
+                    'workDate': work_date.strftime('%Y-%m-%d'),
+                    'mileage': r['mileage'],
+                    'orderNumber': r['order_number'],
+                    'status': r['status'],
+                    'result': r['result'],
+                    'resultNote': r['result_note'],
+                    'callbackDate': r['callback_date'].strftime('%Y-%m-%d') if r['callback_date'] else None,
+                    'isUpcoming': not is_active,
+                    'urgencySeconds': urgency_seconds,
+                    'ageMonths': round(age_months, 1),
+                    'nextServiceDate': next_service.strftime('%Y-%m-%d'),
+                })
 
             # Проставляем is_deferred = False тем, у кого нет флага
             for g in groups.values():
