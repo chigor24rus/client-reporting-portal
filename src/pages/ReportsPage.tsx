@@ -11,6 +11,7 @@ type SearchClient = Client & {
   isBirthday?: boolean;
   birthDate?: string | null;
   isNoData?: boolean;
+  isFormerOwner?: boolean;
 };
 
 const FOLLOWUP_RESULTS = ['2_oil', '2_brake', '2_gearbox', '2_coolant', '5', '6', '7'];
@@ -328,7 +329,10 @@ export default function ReportsPage() {
                 </thead>
                 <tbody>
                   {searchResults.map(c => {
-                    const vis = getClientVisibility(c.workDate, c.work, c.status, c.isExcluded);
+                    const isFormer = c.isFormerOwner;
+                    const vis = isFormer
+                      ? { label: 'Прошлый владелец', color: 'text-muted-foreground', icon: 'UserMinus', detail: 'VIN сейчас у другого клиента' }
+                      : getClientVisibility(c.workDate, c.work, c.status, c.isExcluded);
                     const isExpanded = expandedId === c.id;
                     const needsNote = ['3', '5', '6'].includes(editResult);
                     const needsCallback = editResult === '5';
@@ -338,7 +342,7 @@ export default function ReportsPage() {
                       <>
                         <tr
                           key={c.id}
-                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
+                          className={`cursor-pointer transition-colors ${isFormer ? 'opacity-50' : ''} ${isExpanded ? 'bg-primary/5' : 'hover:bg-secondary/40'}`}
                           onClick={() => handleExpandRow(c.id, c.result)}
                         >
                           <td className="text-foreground font-medium">

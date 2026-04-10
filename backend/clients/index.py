@@ -306,7 +306,6 @@ def handler(event: dict, context) -> dict:
 
                 if search_flat:
                     # Для админа: ищем только записи самого клиента (по имени/телефону/VIN)
-                    # без расширения на весь VIN — каждый клиент остаётся собой
                     cur.execute(f"""
                         SELECT DISTINCT ON (c.vin, c.work)
                                c.id, c.name, c.phone, c.vin, c.work, c.work_date,
@@ -325,10 +324,24 @@ def handler(event: dict, context) -> dict:
                     """, (q, q, q))
                     flat_rows = cur.fetchall()
 
+                    # Актуальный владелец каждого VIN (по последней работе)
+                    found_vins_flat = list({r['vin'] for r in flat_rows})
+                    vin_actual_phone: dict = {}
+                    if found_vins_flat:
+                        cur.execute("""
+                            SELECT DISTINCT ON (vin) vin, phone
+                            FROM clients
+                            WHERE vin = ANY(%s) AND is_excluded = FALSE AND is_no_data = FALSE
+                            ORDER BY vin, work_date DESC NULLS LAST
+                        """, (found_vins_flat,))
+                        vin_actual_phone = {r['vin']: r['phone'] for r in cur.fetchall()}
+
                     today_flat = date.today()
                     clients_flat = []
                     for r in flat_rows:
                         bd = r['birth_date']
+                        actual_phone = vin_actual_phone.get(r['vin'])
+                        is_former = bool(actual_phone and r['phone'] != actual_phone)
                         clients_flat.append({
                             'id': str(r['id']),
                             'name': r['name'],
@@ -344,6 +357,7 @@ def handler(event: dict, context) -> dict:
                             'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
                             'isBirthday': is_birthday_near(bd, today_flat) if bd else False,
                             'isNoData': False,
+                            'isFormerOwner': is_former,
                         })
 
                     # Добавляем is_no_data записи для найденных клиентов
