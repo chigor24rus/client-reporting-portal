@@ -300,10 +300,88 @@ def handler(event: dict, context) -> dict:
                     })
                 return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'stats': stats}, ensure_ascii=False)}
 
-            # ─── Поиск по всей базе (для мастера) ───────────────────────────
+            # ─── Поиск по всей базе ───────────────────────────────────────────
             if search_query and len(search_query) >= 2:
                 q = f'%{search_query.lower()}%'
-                # Шаг 1: находим VIN по имени/телефону/VIN
+
+                if search_flat:
+                    # Для админа: ищем только записи самого клиента (по имени/телефону/VIN)
+                    # без расширения на весь VIN — каждый клиент остаётся собой
+                    cur.execute(f"""
+                        SELECT DISTINCT ON (c.vin, c.work)
+                               c.id, c.name, c.phone, c.vin, c.work, c.work_date,
+                               c.status, c.result, c.birth_date, c.locked_by
+                        FROM clients c
+                        WHERE c.is_excluded = FALSE
+                          AND c.vin != 'NO_VIN'
+                          AND c.is_no_data = FALSE
+                          {test_filter}
+                          AND (
+                              LOWER(c.name) LIKE %s
+                              OR LOWER(c.phone) LIKE %s
+                              OR LOWER(c.vin) LIKE %s
+                          )
+                        ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
+                    """, (q, q, q))
+                    flat_rows = cur.fetchall()
+
+                    today_flat = date.today()
+                    clients_flat = []
+                    for r in flat_rows:
+                        bd = r['birth_date']
+                        clients_flat.append({
+                            'id': str(r['id']),
+                            'name': r['name'],
+                            'phone': r['phone'],
+                            'vin': r['vin'],
+                            'work': r['work'],
+                            'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
+                            'masterId': str(r['locked_by']) if r['locked_by'] else None,
+                            'status': r['status'],
+                            'result': r['result'],
+                            'isExcluded': False,
+                            'isTest': False,
+                            'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
+                            'isBirthday': is_birthday_near(bd, today_flat) if bd else False,
+                            'isNoData': False,
+                        })
+
+                    # Добавляем is_no_data записи для найденных клиентов
+                    found_phones = list({r['phone'] for r in flat_rows if r['phone']})
+                    found_vins_flat = list({r['vin'] for r in flat_rows})
+                    if found_phones or found_vins_flat:
+                        cur.execute(f"""
+                            SELECT id, name, phone, vin, work, status, result, birth_date
+                            FROM clients
+                            WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
+                              {test_filter_no_alias}
+                              AND (phone = ANY(%s) OR vin = ANY(%s))
+                        """, (found_phones, found_vins_flat))
+                        existing_works = {(r['vin'], r['work']) for r in flat_rows}
+                        for r in cur.fetchall():
+                            if (r['vin'], r['work']) in existing_works:
+                                continue
+                            bd = r['birth_date']
+                            clients_flat.append({
+                                'id': str(r['id']),
+                                'name': r['name'],
+                                'phone': r['phone'],
+                                'vin': r['vin'],
+                                'work': r['work'],
+                                'workDate': None,
+                                'masterId': None,
+                                'status': r['status'],
+                                'result': r['result'],
+                                'isExcluded': False,
+                                'isTest': False,
+                                'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
+                                'isBirthday': is_birthday_near(bd, today_flat) if bd else False,
+                                'isNoData': True,
+                            })
+
+                    return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients_flat}, ensure_ascii=False)}
+
+                # Для мастера: VIN как единица — находим VIN, показываем все работы
                 cur.execute(f"""
                     SELECT DISTINCT vin
                     FROM clients
@@ -321,7 +399,7 @@ def handler(event: dict, context) -> dict:
                 if not found_vins:
                     return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': []}, ensure_ascii=False)}
 
-                # Шаг 2: берём все работы по найденным VIN — с актуальным владельцем
+                # Берём все работы по найденным VIN
                 cur.execute(f"""
                     SELECT DISTINCT ON (c.vin, c.work)
                            c.id, c.name, c.phone, c.vin, c.work, c.work_date, c.mileage,
@@ -338,94 +416,6 @@ def handler(event: dict, context) -> dict:
                     ORDER BY c.vin, c.work, c.work_date DESC NULLS LAST
                 """, (found_vins,))
                 rows = cur.fetchall()
-
-                if search_flat:
-                    today_flat = date.today()
-
-                    # Актуальный владелец VIN — тот у кого самая свежая работа
-                    cur.execute("""
-                        SELECT DISTINCT ON (vin) vin, name, phone, birth_date
-                        FROM clients
-                        WHERE vin = ANY(%s) AND is_excluded = FALSE
-                        ORDER BY vin, work_date DESC NULLS LAST
-                    """, (found_vins,))
-                    vin_owner: dict = {}
-                    for ow in cur.fetchall():
-                        bd = ow['birth_date']
-                        vin_owner[ow['vin']] = {
-                            'name': ow['name'],
-                            'phone': ow['phone'],
-                            'birth_date': bd,
-                            'is_birthday': is_birthday_near(bd, today_flat) if bd else False,
-                        }
-
-                    # Если именинник — ищем среди ВСЕХ владельцев VIN
-                    cur.execute("""
-                        SELECT DISTINCT vin, birth_date FROM clients
-                        WHERE vin = ANY(%s) AND birth_date IS NOT NULL
-                    """, (found_vins,))
-                    for bd_row in cur.fetchall():
-                        v, bd = bd_row['vin'], bd_row['birth_date']
-                        if v in vin_owner and is_birthday_near(bd, today_flat) and not vin_owner[v]['is_birthday']:
-                            vin_owner[v]['birth_date'] = bd
-                            vin_owner[v]['is_birthday'] = True
-
-                    clients_flat = []
-                    for r in rows:
-                        vin_bd_info = vin_owner.get(r['vin'], {})
-                        bd = vin_bd_info.get('birth_date')
-                        clients_flat.append({
-                            'id': str(r['id']),
-                            'name': r['name'],       # реальное имя из записи
-                            'phone': r['phone'],     # реальный телефон из записи
-                            'vin': r['vin'],
-                            'work': r['work'],
-                            'workDate': r['work_date'].strftime('%Y-%m-%d') if r['work_date'] else None,
-                            'masterId': str(r['locked_by']) if r['locked_by'] else None,
-                            'status': r['status'],
-                            'result': r['result'],
-                            'isExcluded': False,
-                            'isTest': False,
-                            'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                            'isBirthday': vin_bd_info.get('is_birthday', False),
-                            'isNoData': False,
-                        })
-
-                    # Добавляем is_no_data записи (работы которых нет в истории)
-                    # Берём имя актуального владельца VIN
-                    cur.execute(f"""
-                        SELECT id, name, phone, vin, work, status, result
-                        FROM clients
-                        WHERE is_no_data = TRUE AND is_excluded = FALSE AND status != 'done'
-                          {test_filter_no_alias}
-                          AND vin = ANY(%s)
-                    """, (found_vins,))
-                    existing_works = {(r['vin'], r['work']) for r in rows}
-                    for r in cur.fetchall():
-                        if (r['vin'], r['work']) in existing_works:
-                            continue
-                        vin_bd_info = vin_owner.get(r['vin'], {})
-                        bd = vin_bd_info.get('birth_date')
-                        # Для "нет данных" показываем актуального владельца VIN
-                        owner = vin_owner.get(r['vin'], {})
-                        clients_flat.append({
-                            'id': str(r['id']),
-                            'name': owner.get('name', r['name']),
-                            'phone': owner.get('phone', r['phone']),
-                            'vin': r['vin'],
-                            'work': r['work'],
-                            'workDate': None,
-                            'masterId': None,
-                            'status': r['status'],
-                            'result': r['result'],
-                            'isExcluded': False,
-                            'isTest': False,
-                            'birthDate': bd.strftime('%Y-%m-%d') if bd else None,
-                            'isBirthday': owner.get('is_birthday', False),
-                            'isNoData': True,
-                        })
-
-                    return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'clients': clients_flat}, ensure_ascii=False)}
 
                 # Формат карточек для мастера (DashboardPage) — группируем по VIN
                 today = date.today()
