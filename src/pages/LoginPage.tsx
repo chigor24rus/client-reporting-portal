@@ -58,6 +58,7 @@ export default function LoginPage() {
                   value={phone}
                   onChange={e => setPhone(formatPhone(e.target.value))}
                   placeholder="+7 (___) ___-__-__"
+                  autoComplete="off"
                   className="w-full bg-input border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
                 />
               </div>
@@ -74,6 +75,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Введите пароль"
+                  autoComplete="new-password"
                   className="w-full bg-input border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
                 />
               </div>
